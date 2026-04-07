@@ -319,6 +319,113 @@
       border-radius: 10px; padding: 1rem 1.2rem; font-size: .85rem;
       color: #58a6ff; margin-bottom: 1rem;
     }
+
+    /* ── Tabs ────────────────────────────────────────────────────────── */
+    .tab-nav {
+      display: flex; gap: .5rem; margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border); padding-bottom: 0;
+    }
+    .tab-btn {
+      padding: .6rem 1.2rem; background: none; border: none;
+      color: var(--muted); font-size: .9rem; font-weight: 600;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: all .15s;
+    }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent2); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── History ─────────────────────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: .75rem; margin-bottom: 1.5rem;
+    }
+    .stat-pill {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem; text-align: center;
+    }
+    .stat-pill .sp-val  { font-size: 1.8rem; font-weight: 800; }
+    .stat-pill .sp-lbl  { font-size: .75rem; color: var(--muted);
+                          text-transform: uppercase; letter-spacing: .07em; }
+    .stat-pill.green .sp-val { color: #3fb950; }
+    .stat-pill.red   .sp-val { color: #f85149; }
+    .stat-pill.gold  .sp-val { color: var(--gold); }
+    .stat-pill.blue  .sp-val { color: #58a6ff; }
+
+    .accuracy-bar-wrap { margin-bottom: 1.5rem; }
+    .accuracy-bar-bg {
+      height: 18px; background: var(--surface2);
+      border-radius: 9px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .accuracy-bar-fill {
+      height: 100%; border-radius: 9px;
+      background: linear-gradient(90deg, #238636, #3fb950);
+      transition: width 1s ease;
+    }
+    .accuracy-label {
+      display: flex; justify-content: space-between;
+      font-size: .8rem; color: var(--muted); margin-top: .4rem;
+    }
+
+    .history-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .history-table th {
+      text-align: left; padding: .6rem .8rem;
+      color: var(--muted); text-transform: uppercase;
+      font-size: .72rem; letter-spacing: .07em;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-table td { padding: .7rem .8rem; border-bottom: 1px solid rgba(48,54,61,.5); }
+    .history-table tr:hover td { background: rgba(255,255,255,.02); }
+
+    .badge {
+      display: inline-block; padding: .15rem .5rem;
+      border-radius: 99px; font-size: .72rem; font-weight: 700;
+    }
+    .badge-correct  { background: rgba(35,134,54,.2);  color: #3fb950; }
+    .badge-wrong    { background: rgba(185,28,28,.2);  color: #f85149; }
+    .badge-pending  { background: rgba(139,148,158,.15); color: var(--muted); }
+    .badge-home  { background: rgba(35,134,54,.15);  color: #3fb950; }
+    .badge-draw  { background: rgba(158,106,3,.15);  color: #e3b341; }
+    .badge-away  { background: rgba(185,28,28,.15);  color: #f85149; }
+
+    .enter-result-btn {
+      font-size: .75rem; padding: .2rem .6rem;
+      background: rgba(31,111,235,.15); color: #58a6ff;
+      border: 1px solid rgba(31,111,235,.3); border-radius: 6px;
+      cursor: pointer; transition: background .15s;
+    }
+    .enter-result-btn:hover { background: rgba(31,111,235,.3); }
+
+    .inline-form {
+      display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
+      padding: .5rem; background: var(--surface2);
+      border-radius: 8px; margin-top: .4rem;
+    }
+    .inline-form input {
+      width: 60px; padding: .3rem .5rem;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: .85rem;
+      text-align: center;
+    }
+    .inline-form .save-btn {
+      padding: .3rem .7rem; background: var(--accent);
+      color: #fff; border: none; border-radius: 6px;
+      font-size: .8rem; cursor: pointer;
+    }
+    .history-empty {
+      text-align: center; padding: 3rem; color: var(--muted);
+    }
+    .history-empty .big-icon { font-size: 3rem; margin-bottom: .5rem; }
+
+    /* mini chart */
+    .sparkline { display: flex; gap: 3px; align-items: flex-end; height: 28px; }
+    .sparkline-bar {
+      width: 8px; border-radius: 2px 2px 0 0;
+      transition: height .3s;
+    }
   </style>
 </head>
 <body>
@@ -335,6 +442,14 @@
 </header>
 
 <main>
+  <!-- ── Tab Navigation ─────────────────────────────────────────────── -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('predictor')">⚡ Predictor</button>
+    <button class="tab-btn" onclick="switchTab('history')">📊 Prediction History</button>
+  </div>
+
+  <!-- ── Predictor Tab ───────────────────────────────────────────────── -->
+  <div class="tab-panel active" id="tab-predictor">
   <!-- ── Selector card ──────────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1.5rem">
     <div class="selector-grid">
@@ -361,6 +476,77 @@
     <div class="error-box" id="errorBox"></div>
   </div>
 
+
+  </div><!-- /tab-predictor -->
+
+  <!-- ── History Tab ────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-history">
+
+    <!-- Stats pills -->
+    <div class="stats-row" id="historyStats">
+      <div class="stat-pill blue">
+        <div class="sp-val" id="statTotal">–</div>
+        <div class="sp-lbl">Total Predictions</div>
+      </div>
+      <div class="stat-pill green">
+        <div class="sp-val" id="statCorrect">–</div>
+        <div class="sp-lbl">Correct ✓</div>
+      </div>
+      <div class="stat-pill red">
+        <div class="sp-val" id="statWrong">–</div>
+        <div class="sp-lbl">Wrong ✗</div>
+      </div>
+      <div class="stat-pill gold">
+        <div class="sp-val" id="statAccuracy">–</div>
+        <div class="sp-lbl">Accuracy</div>
+      </div>
+      <div class="stat-pill">
+        <div class="sp-val" id="statGoalErr">–</div>
+        <div class="sp-lbl">Avg Goal Error</div>
+      </div>
+      <div class="stat-pill">
+        <div class="sp-val" id="statExact">–</div>
+        <div class="sp-lbl">Exact Scores</div>
+      </div>
+    </div>
+
+    <!-- Accuracy bar -->
+    <div class="accuracy-bar-wrap card" id="accuracyBarWrap" style="padding:1rem">
+      <div style="font-size:.85rem;font-weight:600;margin-bottom:.6rem">
+        Prediction Accuracy
+        <span id="pendingNote" style="font-size:.75rem;color:var(--muted);font-weight:400;margin-left:.5rem"></span>
+      </div>
+      <div class="accuracy-bar-bg">
+        <div class="accuracy-bar-fill" id="accuracyBarFill" style="width:0%"></div>
+      </div>
+      <div class="accuracy-label">
+        <span id="accuracyLeft">0 correct</span>
+        <span id="accuracyRight">0% accuracy</span>
+      </div>
+    </div>
+
+    <!-- History table -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div style="font-size:.9rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Match Predictions</div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-predict-small" onclick="loadHistory()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border)">🔄 Refresh</button>
+          <button class="btn-predict-small" onclick="autoCheckResults()" style="background:rgba(31,111,235,.2);color:#58a6ff;border:1px solid rgba(31,111,235,.3)">🔍 Auto-Check Results</button>
+        </div>
+      </div>
+      <div id="historyTableWrap">
+        <div class="history-empty">
+          <div class="big-icon">📋</div>
+          <div>No predictions yet</div>
+          <div style="font-size:.8rem;margin-top:.4rem">Make a prediction and it will appear here</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-history -->
+
+  <!-- ── Today's Matches (shown in both tabs at bottom) ──────────────── -->
+  <div id="todayWrapper">
   <!-- ── Today's Matches ───────────────────────────────────────────── -->
   <div class="today-section" id="todaySection">
     <div class="today-header">
@@ -437,6 +623,7 @@
     </div>
 
   </div><!-- /#results -->
+  </div><!-- /todayWrapper -->
 </main>
 
 <!-- datalist for team autocomplete -->
@@ -632,6 +819,235 @@ function hideError() {
 document.addEventListener("keydown", e => {
   if (e.key === "Enter") runPrediction();
 });
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll(".tab-btn").forEach((b,i) => {
+    b.classList.toggle("active", b.textContent.toLowerCase().includes(name) ||
+      (name==="predictor" && i===0) || (name==="history" && i===1));
+  });
+  document.querySelectorAll(".tab-panel").forEach(p => {
+    p.classList.toggle("active", p.id === "tab-" + name);
+  });
+  if (name === "history") loadHistory();
+}
+
+// ── History loading ───────────────────────────────────────────────────────────
+let historyData = [];
+
+async function loadHistory() {
+  try {
+    const res  = await fetch(`${API}/api/history?limit=100`);
+    const json = await res.json();
+    if (json.status !== "ok") return;
+
+    historyData = json.data.records || [];
+    renderHistoryStats(json.data.stats || {});
+    renderHistoryTable(historyData);
+  } catch (err) {
+    document.getElementById("historyTableWrap").innerHTML =
+      `<div class="history-empty"><div class="big-icon">⚠️</div><div>${err.message}</div></div>`;
+  }
+}
+
+function renderHistoryStats(s) {
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val ?? "–"; };
+
+  set("statTotal",    s.total_predictions ?? 0);
+  set("statCorrect",  s.correct ?? 0);
+  set("statWrong",    s.wrong ?? 0);
+  set("statAccuracy", s.accuracy_pct != null ? s.accuracy_pct + "%" : "–");
+  set("statGoalErr",  s.avg_goal_error != null ? "±" + s.avg_goal_error : "–");
+  set("statExact",    s.exact_scorelines != null ? s.exact_scorelines + " (" + (s.exact_score_pct ?? 0) + "%)" : "–");
+
+  // Accuracy bar
+  const pct  = s.accuracy_pct ?? 0;
+  const fill = document.getElementById("accuracyBarFill");
+  const left = document.getElementById("accuracyLeft");
+  const right= document.getElementById("accuracyRight");
+  const note = document.getElementById("pendingNote");
+  if (fill)  fill.style.width = pct + "%";
+  if (left)  left.textContent  = `${s.correct ?? 0} correct of ${s.resolved ?? 0} resolved`;
+  if (right) right.textContent = pct ? pct + "%" : "No results yet";
+  if (note && s.pending)  note.textContent = `(${s.pending} pending)`;
+}
+
+function renderHistoryTable(records) {
+  const wrap = document.getElementById("historyTableWrap");
+  if (!records || records.length === 0) {
+    wrap.innerHTML = `<div class="history-empty">
+      <div class="big-icon">📋</div>
+      <div>No predictions yet — make one above!</div>
+    </div>`;
+    return;
+  }
+
+  const resultBadge = r => {
+    const map = {"Home Win":"home","Draw":"draw","Away Win":"away"};
+    const cls = map[r] || "pending";
+    return `<span class="badge badge-${cls}">${r || "?"}</span>`;
+  };
+
+  const statusBadge = s => {
+    if (s === "correct") return `<span class="badge badge-correct">✓ Correct</span>`;
+    if (s === "wrong")   return `<span class="badge badge-wrong">✗ Wrong</span>`;
+    return `<span class="badge badge-pending">⏳ Pending</span>`;
+  };
+
+  const rows = records.map(r => {
+    const date  = r.timestamp ? r.timestamp.slice(0,10) : "–";
+    const score = (r.actual_home_goals != null)
+      ? `<strong>${r.actual_home_goals}–${r.actual_away_goals}</strong>`
+      : `<span style="color:var(--muted);font-size:.8rem">${r.pred_home_goals?.toFixed(1)}–${r.pred_away_goals?.toFixed(1)} xG</span>`;
+
+    const entryForm = r.status === "pending" ? `
+      <button class="enter-result-btn" onclick="showResultForm(${r.id})">
+        + Enter Result
+      </button>
+      <div id="form-${r.id}" style="display:none">
+        <div class="inline-form">
+          <span style="font-size:.8rem;color:var(--muted)">${r.home_team}</span>
+          <input type="number" id="fh-${r.id}" min="0" max="20" placeholder="H" />
+          <span style="color:var(--muted)">–</span>
+          <input type="number" id="fa-${r.id}" min="0" max="20" placeholder="A" />
+          <span style="font-size:.8rem;color:var(--muted)">${r.away_team}</span>
+          <button class="save-btn" onclick="submitResult(${r.id})">Save</button>
+        </div>
+      </div>` : (r.status === "correct" ? "✓" : r.status === "wrong" ? `Actual: ${r.actual_result}` : "");
+
+    const goalErr = r.goals_error != null ? `±${r.goals_error}` : "–";
+
+    return `<tr>
+      <td style="color:var(--muted);font-size:.8rem">${date}</td>
+      <td>
+        <div style="font-weight:600">${r.home_team} <span style="color:var(--muted);font-weight:400">vs</span> ${r.away_team}</div>
+        <div style="font-size:.75rem;color:var(--muted)">${r.division || ""}</div>
+      </td>
+      <td>${resultBadge(r.pred_result)}</td>
+      <td>${score}</td>
+      <td>${statusBadge(r.status)}<br/><div style="margin-top:.3rem">${entryForm}</div></td>
+      <td style="font-size:.8rem;color:var(--muted)">${goalErr}</td>
+    </tr>`;
+  }).join("");
+
+  wrap.innerHTML = `
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Match</th>
+          <th>Predicted</th>
+          <th>Score</th>
+          <th>Outcome</th>
+          <th>Goal Err</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function showResultForm(id) {
+  const form = document.getElementById(`form-${id}`);
+  if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+}
+
+async function submitResult(id) {
+  const h = parseInt(document.getElementById(`fh-${id}`)?.value);
+  const a = parseInt(document.getElementById(`fa-${id}`)?.value);
+
+  if (isNaN(h) || isNaN(a)) {
+    alert("Please enter both home and away goals");
+    return;
+  }
+
+  try {
+    const res  = await fetch(`${API}/api/history/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, actual_home: h, actual_away: a }),
+    });
+    const json = await res.json();
+    if (json.status === "ok") {
+      loadHistory();
+    }
+  } catch (err) {
+    alert("Failed to save: " + err.message);
+  }
+}
+
+async function autoCheckResults() {
+  const btn = event.target;
+  btn.textContent = "🔍 Checking...";
+  btn.disabled = true;
+  try {
+    const res  = await fetch(`${API}/api/history/auto-check`, { method: "POST" });
+    const json = await res.json();
+    if (json.status === "ok") {
+      const n = json.data.resolved;
+      btn.textContent = n > 0 ? `✓ Found ${n} results` : "✓ No new results";
+      setTimeout(() => { btn.textContent = "🔍 Auto-Check Results"; btn.disabled = false; }, 2000);
+      if (n > 0) loadHistory();
+    }
+  } catch (err) {
+    btn.textContent = "⚠ Failed";
+    btn.disabled = false;
+  }
+}
+
+// Also save match_date when predicting from today's fixtures
+const _origQuickPredict = quickPredict;
+quickPredict = function(homeTeam, awayTeam, division, matchDate) {
+  document.getElementById("homeTeamInput").value = homeTeam;
+  document.getElementById("awayTeamInput").value = awayTeam;
+  const sel = document.getElementById("divisionSelect");
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === division) { sel.selectedIndex = i; break; }
+  }
+  window._currentMatchDate = matchDate || "";
+  switchTab("predictor");
+  setTimeout(() => runPrediction(), 200);
+};
+
+// Patch runPrediction to include match_date and history_id
+const _origRunPrediction = runPrediction;
+runPrediction = async function() {
+  const homeTeam = document.getElementById("homeTeamInput").value.trim();
+  const awayTeam = document.getElementById("awayTeamInput").value.trim();
+  const division = document.getElementById("divisionSelect").value;
+
+  hideError();
+  if (!homeTeam || !awayTeam) return showError("Please enter both teams.");
+  if (homeTeam === awayTeam)  return showError("Home and away teams must be different.");
+
+  const btn = document.getElementById("predictBtn");
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> <span>Predicting …</span>`;
+
+  try {
+    const res = await fetch(`${API}/api/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        home_team:    homeTeam,
+        away_team:    awayTeam,
+        division,
+        match_date:   window._currentMatchDate || "",
+        save_history: true,
+      }),
+    });
+    const json = await res.json();
+    if (json.status !== "ok") return showError(json.message || "Prediction failed.");
+    renderResults(json.data);
+    if (json.data.history_id) {
+      window._lastHistoryId = json.data.history_id;
+    }
+  } catch (err) {
+    showError("Network error – is the server running?");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<span>⚡ Predict Match</span>`;
+  }
+};
 
 // ── Today's Matches ───────────────────────────────────────────────────────
 async function loadTodayMatches() {

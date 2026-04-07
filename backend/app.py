@@ -29,6 +29,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import predictor
+import history_manager
 from team_aliases import normalise
 
 BASE_DIR     = Path(__file__).resolve().parent.parent
@@ -158,6 +159,12 @@ def api_predict():
 
     try:
         result = predictor.predict(home_team, away_team, division)
+        # Save to history if client requests it (default: yes)
+        if body.get("save_history", True):
+            match_date = body.get("match_date", "")
+            result["match_date"] = match_date
+            saved = history_manager.save_prediction(result)
+            result["history_id"] = saved["id"]
         return _ok(result)
     except Exception as exc:
         app.logger.exception("Prediction error")
@@ -281,3 +288,47 @@ def api_today():
 
 
 
+
+# ── Prediction History ─────────────────────────────────────────────────────────
+
+@app.route("/api/history")
+def api_history():
+    limit    = int(request.args.get("limit", 100))
+    division = request.args.get("division", None)
+    data     = history_manager.get_history(limit=limit, division=division)
+    return _ok(data)
+
+
+@app.route("/api/history/update", methods=["POST"])
+def api_history_update():
+    body = request.get_json(force=True, silent=True) or {}
+    record_id           = body.get("id")
+    actual_home         = body.get("actual_home")
+    actual_away         = body.get("actual_away")
+    actual_home_corners = body.get("actual_home_corners")
+    actual_away_corners = body.get("actual_away_corners")
+    if record_id is None or actual_home is None or actual_away is None:
+        return _err("Required: id, actual_home, actual_away")
+    updated = history_manager.update_result(
+        int(record_id), int(actual_home), int(actual_away),
+        actual_home_corners, actual_away_corners
+    )
+    return _ok({"record": updated})
+
+
+@app.route("/api/history/auto-check", methods=["POST"])
+def api_history_auto_check():
+    n = history_manager.check_results_from_fbref()
+    return _ok({"resolved": n})
+
+
+@app.route("/api/history/clear", methods=["POST"])
+def api_history_clear():
+    history_manager._save([])
+    return _ok({"message": "History cleared"})
+
+
+if __name__ == "__main__":
+    port  = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug)
