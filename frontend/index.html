@@ -653,14 +653,7 @@ async function loadTodayMatches() {
     }
 
     if (message && matches.length === 0) {
-      container.innerHTML = `
-        <div class="setup-key-hint">
-          ℹ️ To see live fixtures, add your free
-          <a href="https://www.football-data.org/client/register"
-             target="_blank" style="color:#58a6ff">football-data.org key</a>
-          as <strong>FOOTBALL_DATA_ORG_KEY</strong> in Render environment variables.
-          The predictor works fine without it — just select teams manually below.
-        </div>`;
+      container.innerHTML = `<div class="no-matches">No fixtures found for today. Select teams manually below to predict any match.</div>`;
       return;
     }
 
