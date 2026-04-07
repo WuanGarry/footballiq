@@ -3,23 +3,26 @@ set -e
 
 echo "============================================"
 echo "  FootballIQ  -  Build Script"
-echo "  RAM limit: 512MB (Render free tier)"
 echo "============================================"
 
 echo ""
-echo "[1/4] Installing dependencies..."
+echo "[1/5] Installing dependencies..."
 pip install -r requirements.txt
 
 echo ""
-echo "[2/4] Downloading latest match data..."
+echo "[2/5] Downloading latest match data..."
 python scripts/fetch_data.py
 
 echo ""
-echo "[3/4] Building features..."
+echo "[3/5] Seeding UEFA competitions (UCL/UEL/UECL)..."
+python scripts/seed_uefa.py
+
+echo ""
+echo "[4/5] Building features..."
 python scripts/build_features.py
 
 echo ""
-echo "[4/4] Training models (memory-optimised)..."
+echo "[5/5] Training models..."
 python scripts/train.py
 
 echo ""

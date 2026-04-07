@@ -257,6 +257,68 @@
 
     /* ── Team-search datalist hint ────────────────────────────────────── */
     datalist { display: none; }
+
+    /* ── Today's Matches ─────────────────────────────────────────────── */
+    .today-section { margin-bottom: 2rem; }
+    .today-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .today-header h2 { font-size: 1.1rem; font-weight: 700; }
+    .today-date { font-size: .8rem; color: var(--muted); }
+    .matches-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: .75rem;
+    }
+    .match-fixture {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      display: flex; flex-direction: column; gap: .5rem;
+      transition: border-color .2s;
+    }
+    .match-fixture:hover { border-color: var(--accent2); }
+    .fixture-comp {
+      font-size: .72rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em;
+    }
+    .fixture-teams {
+      font-size: .95rem; font-weight: 700;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .fixture-vs { color: var(--muted); font-weight: 400; font-size: .8rem; }
+    .fixture-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: .8rem;
+    }
+    .fixture-time { color: var(--muted); }
+    .fixture-status {
+      padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600;
+    }
+    .status-scheduled { background: rgba(31,111,235,.15); color: #58a6ff; }
+    .status-live      { background: rgba(35,134,54,.15);  color: #3fb950; animation: pulse 1.5s infinite; }
+    .status-finished  { background: rgba(139,148,158,.1); color: var(--muted); }
+    .fixture-score    { font-size: 1.1rem; font-weight: 800; text-align: center; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .btn-predict-small {
+      padding: .4rem .9rem; background: var(--accent2);
+      color: #fff; border: none; border-radius: 6px;
+      font-size: .8rem; font-weight: 600; cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-predict-small:hover { opacity: .85; }
+    .no-matches {
+      text-align: center; padding: 2rem; color: var(--muted);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; font-size: .9rem;
+    }
+    .setup-key-hint {
+      background: rgba(31,111,235,.08); border: 1px solid rgba(31,111,235,.25);
+      border-radius: 10px; padding: 1rem 1.2rem; font-size: .85rem;
+      color: #58a6ff; margin-bottom: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -273,6 +335,17 @@
 </header>
 
 <main>
+  <!-- ── Today's Matches ───────────────────────────────────────────── -->
+  <div class="today-section" id="todaySection">
+    <div class="today-header">
+      <h2>📅 Today's Matches</h2>
+      <span class="today-date" id="todayDate"></span>
+    </div>
+    <div id="todayContent">
+      <div class="no-matches">Loading fixtures…</div>
+    </div>
+  </div>
+
   <!-- ── Selector card ──────────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1.5rem">
     <div class="selector-grid">
@@ -559,6 +632,118 @@ function hideError() {
 document.addEventListener("keydown", e => {
   if (e.key === "Enter") runPrediction();
 });
+
+// ── Today's Matches ───────────────────────────────────────────────────────
+async function loadTodayMatches() {
+  const container = document.getElementById("todayContent");
+  const dateEl    = document.getElementById("todayDate");
+
+  try {
+    const res  = await fetch(`${API}/api/today`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+
+    const { matches, date, message } = json.data;
+
+    // Format date nicely
+    if (date) {
+      const d = new Date(date);
+      dateEl.textContent = d.toLocaleDateString("en-GB",
+        { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+    }
+
+    if (message && matches.length === 0) {
+      container.innerHTML = `
+        <div class="setup-key-hint">
+          ℹ️ To see live fixtures, add your free
+          <a href="https://www.football-data.org/client/register"
+             target="_blank" style="color:#58a6ff">football-data.org key</a>
+          as <strong>FOOTBALL_DATA_ORG_KEY</strong> in Render environment variables.
+          The predictor works fine without it — just select teams manually below.
+        </div>`;
+      return;
+    }
+
+    if (!matches || matches.length === 0) {
+      container.innerHTML = `<div class="no-matches">No matches scheduled today.</div>`;
+      return;
+    }
+
+    // Group by competition
+    const byComp = {};
+    matches.forEach(m => {
+      const k = m.competition || m.division;
+      if (!byComp[k]) byComp[k] = [];
+      byComp[k].push(m);
+    });
+
+    let html = '<div class="matches-grid">';
+    matches.forEach(m => {
+      const statusClass = m.status === "FINISHED"  ? "status-finished"
+                        : m.status === "IN_PLAY" ||
+                          m.status === "PAUSED"    ? "status-live"
+                        :                            "status-scheduled";
+      const statusText  = m.status === "FINISHED"  ? "FT"
+                        : m.status === "IN_PLAY"   ? "LIVE"
+                        : m.status === "PAUSED"    ? "HT"
+                        : m.kick_off               ? `🕐 ${m.kick_off} UTC`
+                        : "Scheduled";
+
+      const scoreHtml = m.score
+        ? `<div class="fixture-score">${m.score}</div>`
+        : "";
+
+      const predictBtn = m.can_predict
+        ? `<button class="btn-predict-small"
+             onclick="quickPredict('${m.home_team}','${m.away_team}','${m.division}')">
+             ⚡ Predict
+           </button>`
+        : `<span style="font-size:.75rem;color:var(--muted)">Teams not in model yet</span>`;
+
+      html += `
+        <div class="match-fixture">
+          <div class="fixture-comp">${m.competition}</div>
+          <div class="fixture-teams">
+            <span>${m.home_team}</span>
+            <span class="fixture-vs">vs</span>
+            <span>${m.away_team}</span>
+          </div>
+          ${scoreHtml}
+          <div class="fixture-meta">
+            <span class="fixture-time">${predictBtn}</span>
+            <span class="fixture-status ${statusClass}">${statusText}</span>
+          </div>
+        </div>`;
+    });
+    html += "</div>";
+    container.innerHTML = html;
+
+  } catch (err) {
+    container.innerHTML = `<div class="no-matches">Could not load fixtures. ${err.message || ""}</div>`;
+  }
+}
+
+function quickPredict(homeTeam, awayTeam, division) {
+  // Fill in the team inputs and scroll to predictor
+  document.getElementById("homeTeamInput").value = homeTeam;
+  document.getElementById("awayTeamInput").value = awayTeam;
+
+  // Set division dropdown
+  const sel = document.getElementById("divisionSelect");
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === division) {
+      sel.selectedIndex = i;
+      break;
+    }
+  }
+
+  // Scroll to predict button and run prediction
+  document.getElementById("predictBtn").scrollIntoView({ behavior: "smooth" });
+  setTimeout(() => runPrediction(), 400);
+}
+
+// Load today's matches on boot
+loadTodayMatches();
 
 boot();
 </script>

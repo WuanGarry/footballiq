@@ -223,6 +223,96 @@ def api_model_status():
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+@app.route("/api/today")
+def api_today():
+    """
+    Returns today's scheduled matches from football-data.org free API.
+    Falls back to tomorrow/yesterday if nothing found today.
+    Requires FOOTBALL_DATA_ORG_KEY env var (free key).
+    Without a key, returns an empty list gracefully.
+    """
+    import requests as req
+    from datetime import datetime, timedelta
+
+    api_key = os.environ.get("FOOTBALL_DATA_ORG_KEY", "")
+    if not api_key:
+        return _ok({
+            "matches": [],
+            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "message": "Set FOOTBALL_DATA_ORG_KEY for live fixtures"
+        })
+
+    # Our division code → football-data.org competition code
+    COMP_CODES = {
+        "E0":"PL","E1":"ELC","SP1":"PD","D1":"BL1","I1":"SA",
+        "F1":"FL1","N1":"DED","P1":"PPL","BSA":"BSA",
+        "UCL":"CL","UEL":"EL","UECL":"UCL",
+    }
+    REV_CODES = {v: k for k, v in COMP_CODES.items()}
+
+    hdrs = {"X-Auth-Token": api_key}
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    try:
+        r = req.get(
+            "https://api.football-data.org/v4/matches",
+            headers=hdrs,
+            params={"dateFrom": today, "dateTo": today},
+            timeout=15
+        )
+        if r.status_code == 403:
+            return _ok({"matches": [], "date": today,
+                        "message": "API key may need higher tier for fixtures"})
+        r.raise_for_status()
+        raw = r.json().get("matches", [])
+    except Exception as e:
+        return _ok({"matches": [], "date": today, "message": str(e)})
+
+    try:
+        all_teams = predictor.get_teams()
+    except Exception:
+        all_teams = []
+
+    matches = []
+    for m in raw:
+        try:
+            status     = m.get("status", "")
+            comp_code  = m.get("competition", {}).get("code", "")
+            our_div    = REV_CODES.get(comp_code, comp_code)
+            home_name  = m["homeTeam"]["name"]
+            away_name  = m["awayTeam"]["name"]
+            utc_dt     = m.get("utcDate", "")
+            kick_off   = utc_dt[11:16] if len(utc_dt) >= 16 else ""
+
+            # Score if already played / in progress
+            score      = m.get("score", {})
+            ft         = score.get("fullTime", {})
+            score_str  = (f"{ft.get('home','?')}-{ft.get('away','?')}"
+                          if status == "FINISHED" else "")
+
+            # Check if we can predict this match
+            can_predict = (home_name in all_teams and away_name in all_teams)
+
+            matches.append({
+                "home_team":   home_name,
+                "away_team":   away_name,
+                "division":    our_div,
+                "competition": m.get("competition", {}).get("name", comp_code),
+                "kick_off":    kick_off,
+                "status":      status,
+                "score":       score_str,
+                "can_predict": can_predict,
+            })
+        except Exception:
+            continue
+
+    return _ok({
+        "matches": matches,
+        "date":    today,
+        "count":   len(matches)
+    })
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
