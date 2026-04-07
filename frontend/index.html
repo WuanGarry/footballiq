@@ -335,17 +335,6 @@
 </header>
 
 <main>
-  <!-- ── Today's Matches ───────────────────────────────────────────── -->
-  <div class="today-section" id="todaySection">
-    <div class="today-header">
-      <h2>📅 Today's Matches</h2>
-      <span class="today-date" id="todayDate"></span>
-    </div>
-    <div id="todayContent">
-      <div class="no-matches">Loading fixtures…</div>
-    </div>
-  </div>
-
   <!-- ── Selector card ──────────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1.5rem">
     <div class="selector-grid">
@@ -370,6 +359,17 @@
     </button>
 
     <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <!-- ── Today's Matches ───────────────────────────────────────────── -->
+  <div class="today-section" id="todaySection">
+    <div class="today-header">
+      <h2>📅 Today's Matches</h2>
+      <span class="today-date" id="todayDate"></span>
+    </div>
+    <div id="todayContent">
+      <div class="no-matches">Loading fixtures…</div>
+    </div>
   </div>
 
   <!-- ── Results ────────────────────────────────────────────────────── -->
@@ -686,20 +686,22 @@ async function loadTodayMatches() {
         ? `<div class="fixture-score">${m.score}</div>`
         : "";
 
+      const displayHome = m.home_team_display || m.home_team;
+      const displayAway = m.away_team_display || m.away_team;
       const predictBtn = m.can_predict
         ? `<button class="btn-predict-small"
              onclick="quickPredict('${m.home_team}','${m.away_team}','${m.division}')">
              ⚡ Predict
            </button>`
-        : `<span style="font-size:.75rem;color:var(--muted)">Teams not in model yet</span>`;
+        : `<span style="font-size:.75rem;color:var(--muted)" title="Teams may need retraining">⚽ No model</span>`;
 
       html += `
         <div class="match-fixture">
           <div class="fixture-comp">${m.competition}</div>
           <div class="fixture-teams">
-            <span>${m.home_team}</span>
+            <span>${displayHome}</span>
             <span class="fixture-vs">vs</span>
-            <span>${m.away_team}</span>
+            <span>${displayAway}</span>
           </div>
           ${scoreHtml}
           <div class="fixture-meta">

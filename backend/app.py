@@ -29,6 +29,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import predictor
+from team_aliases import normalise
 
 BASE_DIR     = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -146,11 +147,14 @@ def api_predict():
     if home_team == away_team:
         return _err("Home team and away team must be different.")
 
-    teams = predictor.get_teams()
+    teams      = predictor.get_teams()
+    home_team  = normalise(home_team, teams)
+    away_team  = normalise(away_team, teams)
+
     if home_team not in teams:
-        return _err(f"Unknown home team: '{home_team}'")
+        return _err(f"Unknown home team: '{home_team}' — not in model yet")
     if away_team not in teams:
-        return _err(f"Unknown away team: '{away_team}'")
+        return _err(f"Unknown away team: '{away_team}' — not in model yet")
 
     try:
         result = predictor.predict(home_team, away_team, division)
@@ -255,9 +259,15 @@ def api_today():
 
     matches = []
     for m in raw_matches:
+        norm_home = normalise(m["home_team"], all_teams)
+        norm_away = normalise(m["away_team"], all_teams)
+        m["home_team_display"] = m["home_team"]  # keep original for display
+        m["away_team_display"] = m["away_team"]
+        m["home_team"] = norm_home               # use normalised for predict
+        m["away_team"] = norm_away
         m["can_predict"] = (
-            m["home_team"] in all_teams and
-            m["away_team"] in all_teams and
+            norm_home in all_teams and
+            norm_away in all_teams and
             bool(m["division"])
         )
         matches.append(m)

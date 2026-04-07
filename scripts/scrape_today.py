@@ -59,16 +59,66 @@ COMP_MAP = {
     "Champions League":         "UCL",
     "Europa League":            "UEL",
     "Europa Conference League": "UECL",
-    # Americas
+    # Americas — domestic
     "Série A":                  "BSA",
     "Liga MX":                  "MX1",
     "Major League Soccer":      "MLS",
-    # Other
-    "Greek Super League":       "GR1",
+    "Primera División":         "ARG",
+    # Americas — cup competitions
+    "Copa Libertadores":        "COPLIB",
+    "CONMEBOL Libertadores":    "COPLIB",
+    "Copa Sudamericana":        "COPASUD",
+    "CONMEBOL Sudamericana":    "COPASUD",
+    "CONCACAF Champions Cup":   "CONCACAF",
+    "CONCACAF Champions League":"CONCACAF",
+    "Liga de Campeones CONCACAF":"CONCACAF",
+    # Other European
+    "Greek Super League":           "GR1",
     "Austrian Football Bundesliga": "AT1",
-    "Swiss Super League":       "CH1",
-    "Danish Superliga":         "DK1",
-    "Allsvenskan":              "SE1",
+    "Swiss Super League":           "CH1",
+    "Danish Superliga":             "DK1",
+    "Allsvenskan":                  "SE1",
+    "Ekstraklasa":                  "PL1",
+    "Liga I":                       "RO1",
+    "HNL":                          "HR1",
+    # African leagues
+    "Ghana Premier League":         "GPL",
+    "Nigerian Premier Football League": "NPFL",
+    "Premier Division":             "PSL",
+    "Egyptian Premier League":      "EPL_EG",
+    "Botola Pro":                   "MAR1",
+    "CAF Champions League":         "CAFCL",
+    "CAF Confederation Cup":        "CAFCC",
+    # Middle East
+    "Saudi Professional League":    "SAU1",
+    "Saudi Pro League":             "SAU1",
+    "UAE Pro League":               "UAE1",
+    "Qatar Stars League":           "QAT1",
+    # Asia / Pacific
+    "Indian Super League":          "ISL",
+    "Chinese Super League":         "CSL",
+    "K League 1":                   "KL1",
+    "A-League Men":                 "AUS1",
+    # South America — cups
+    "Copa Libertadores":            "COPLIB",
+    "CONMEBOL Libertadores":        "COPLIB",
+    "Copa Sudamericana":            "COPASUD",
+    "CONMEBOL Sudamericana":        "COPASUD",
+    # North/Central America
+    "CONCACAF Champions Cup":       "CONCACAF",
+    "CONCACAF Champions League":    "CONCACAF",
+    # South America — domestic
+    "Primera División":             "ARG",
+    "Brasileirão":                  "BSA",
+    "Liga BetPlay DIMAYOR":         "COL1",
+    "Liga Profesional de Fútbol":   "ARG",
+    "Torneo Apertura":              "ARG",
+    "Torneo Clausura":              "ARG",
+    "Primera División de Uruguay":  "URU1",
+    "LigaPro":                      "ECU1",
+    "División Profesional":         "BOL1",
+    "Liga 1":                       "PER1",
+    "División de Honor":            "PAR1",
 }
 
 
