@@ -258,7 +258,7 @@
     /* ── Team-search datalist hint ────────────────────────────────────── */
     datalist { display: none; }
 
-    /* ── Today's Matches ─────────────────────────────────────────────── */
+    /* ── Today's Matches — Flashscore style ─────────────────────────── */
     .today-section { margin-bottom: 2rem; }
     .today-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -266,58 +266,95 @@
     }
     .today-header h2 { font-size: 1.1rem; font-weight: 700; }
     .today-date { font-size: .8rem; color: var(--muted); }
-    .matches-grid {
+
+    /* Continent block */
+    .continent-block { margin-bottom: 1.5rem; }
+    .continent-header {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .5rem .8rem; background: rgba(255,255,255,.04);
+      border-radius: 8px; margin-bottom: .5rem; cursor: pointer;
+    }
+    .continent-header .cont-name {
+      font-size: .8rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .1em;
+      color: var(--muted);
+    }
+    .continent-toggle { margin-left: auto; color: var(--muted); font-size: .7rem; }
+
+    /* Country block */
+    .country-block { margin-bottom: .75rem; }
+    .country-header {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .35rem .8rem;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer; user-select: none;
+    }
+    .country-flag { font-size: 1rem; }
+    .country-name {
+      font-size: .82rem; font-weight: 700; color: var(--text);
+    }
+    .league-name {
+      font-size: .75rem; color: var(--muted);
+      margin-left: .3rem;
+    }
+    .match-count-badge {
+      margin-left: auto; font-size: .7rem; color: var(--muted);
+      background: var(--surface2); padding: .1rem .4rem;
+      border-radius: 99px;
+    }
+
+    /* Individual fixture row */
+    .fixture-row {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: .75rem;
+      grid-template-columns: 70px 1fr 60px 1fr auto;
+      align-items: center;
+      gap: .5rem;
+      padding: .55rem .8rem;
+      border-bottom: 1px solid rgba(48,54,61,.4);
+      transition: background .1s;
     }
-    .match-fixture {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1rem;
-      display: flex; flex-direction: column; gap: .5rem;
-      transition: border-color .2s;
+    .fixture-row:hover { background: rgba(255,255,255,.02); }
+    .fixture-row:last-child { border-bottom: none; }
+
+    .fx-time {
+      font-size: .8rem; font-weight: 600; color: #58a6ff;
+      text-align: center;
     }
-    .match-fixture:hover { border-color: var(--accent2); }
-    .fixture-comp {
-      font-size: .72rem; color: var(--muted);
-      text-transform: uppercase; letter-spacing: .07em;
+    .fx-time.ft    { color: var(--muted); font-weight: 400; }
+    .fx-time.live  { color: #3fb950; animation: pulse 1.5s infinite; }
+
+    .fx-team {
+      font-size: .88rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .fixture-teams {
-      font-size: .95rem; font-weight: 700;
-      display: flex; align-items: center; gap: .5rem;
+    .fx-team.away  { text-align: right; }
+
+    .fx-score {
+      text-align: center; font-size: .95rem; font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      min-width: 50px;
     }
-    .fixture-vs { color: var(--muted); font-weight: 400; font-size: .8rem; }
-    .fixture-meta {
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: .8rem;
-    }
-    .fixture-time { color: var(--muted); }
-    .fixture-status {
-      padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600;
-    }
-    .status-scheduled { background: rgba(31,111,235,.15); color: #58a6ff; }
-    .status-live      { background: rgba(35,134,54,.15);  color: #3fb950; animation: pulse 1.5s infinite; }
-    .status-finished  { background: rgba(139,148,158,.1); color: var(--muted); }
-    .fixture-score    { font-size: 1.1rem; font-weight: 800; text-align: center; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .fx-score .sc-num { color: var(--text); }
+    .fx-score .sc-sep { color: var(--muted); margin: 0 2px; }
+    .fx-score .sc-live { color: #3fb950; }
+
+    .fx-action { text-align: right; }
     .btn-predict-small {
-      padding: .4rem .9rem; background: var(--accent2);
+      padding: .3rem .7rem; background: var(--accent2);
       color: #fff; border: none; border-radius: 6px;
-      font-size: .8rem; font-weight: 600; cursor: pointer;
-      transition: opacity .15s;
+      font-size: .75rem; font-weight: 600; cursor: pointer;
+      transition: opacity .15s; white-space: nowrap;
     }
     .btn-predict-small:hover { opacity: .85; }
+    .btn-no-model {
+      font-size: .72rem; color: var(--muted); padding: .3rem 0;
+    }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
     .no-matches {
       text-align: center; padding: 2rem; color: var(--muted);
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 10px; font-size: .9rem;
-    }
-    .setup-key-hint {
-      background: rgba(31,111,235,.08); border: 1px solid rgba(31,111,235,.25);
-      border-radius: 10px; padding: 1rem 1.2rem; font-size: .85rem;
-      color: #58a6ff; margin-bottom: 1rem;
     }
 
     /* ── Tabs ────────────────────────────────────────────────────────── */
@@ -1127,6 +1164,30 @@ runPrediction = async function() {
 };
 
 // ── Today's Matches ───────────────────────────────────────────────────────
+// ── Today's Matches — Flashscore style ──────────────────────────────────────
+const COUNTRY_FLAGS = {
+  "England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Wales":"🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+  "Spain":"🇪🇸","Germany":"🇩🇪","Italy":"🇮🇹","France":"🇫🇷","Portugal":"🇵🇹",
+  "Netherlands":"🇳🇱","Belgium":"🇧🇪","Turkey":"🇹🇷","Norway":"🇳🇴","Sweden":"🇸🇪",
+  "Denmark":"🇩🇰","Switzerland":"🇨🇭","Austria":"🇦🇹","Greece":"🇬🇷","Poland":"🇵🇱",
+  "Romania":"🇷🇴","Croatia":"🇭🇷","Russia":"🇷🇺","Ukraine":"🇺🇦","Serbia":"🇷🇸",
+  "Czech Republic":"🇨🇿","Hungary":"🇭🇺",
+  "Ghana":"🇬🇭","Nigeria":"🇳🇬","South Africa":"🇿🇦","Egypt":"🇪🇬",
+  "Morocco":"🇲🇦","Tunisia":"🇹🇳","Kenya":"🇰🇪","Ethiopia":"🇪🇹",
+  "Brazil":"🇧🇷","Argentina":"🇦🇷","Colombia":"🇨🇴","Chile":"🇨🇱","Uruguay":"🇺🇾",
+  "Paraguay":"🇵🇾","Ecuador":"🇪🇨","Bolivia":"🇧🇴","Peru":"🇵🇪","Venezuela":"🇻🇪",
+  "USA / Canada":"🇺🇸","Mexico":"🇲🇽","Canada":"🇨🇦","Costa Rica":"🇨🇷",
+  "Japan":"🇯🇵","South Korea":"🇰🇷","China":"🇨🇳","India":"🇮🇳",
+  "Saudi Arabia":"🇸🇦","UAE":"🇦🇪","Qatar":"🇶🇦","Iran":"🇮🇷",
+  "Australia":"🇦🇺","New Zealand":"🇳🇿",
+  "UEFA":"🇪🇺","CONMEBOL":"🌎","CONCACAF":"🌍","CAF":"🌍","AFC":"🌏","FIFA":"🌐",
+};
+
+const CONT_ICONS = {
+  "Europe":"🌍","Africa":"🌍","South America":"🌎",
+  "North America":"🌎","Asia":"🌏","Asia / Pacific":"🌏","World":"🌐","Other":"🔘"
+};
+
 async function loadTodayMatches() {
   const container = document.getElementById("todayContent");
   const dateEl    = document.getElementById("todayDate");
@@ -1134,82 +1195,123 @@ async function loadTodayMatches() {
   try {
     const res  = await fetch(`${API}/api/today`);
     const json = await res.json();
-    if (json.status !== "ok") throw new Error(json.message);
+    if (json.status !== "ok") throw new Error(json.message || "Failed");
 
-    const { matches, date, message } = json.data;
+    const { grouped, date: matchDate, count, message } = json.data;
 
-    // Format date nicely
-    if (date) {
-      const d = new Date(date);
+    if (matchDate) {
+      const d = new Date(matchDate + "T12:00:00Z");
       dateEl.textContent = d.toLocaleDateString("en-GB",
         { weekday:"long", day:"numeric", month:"long", year:"numeric" });
     }
 
-    if (message && matches.length === 0) {
-      container.innerHTML = `<div class="no-matches">No fixtures found for today. Select teams manually below to predict any match.</div>`;
+    if (!grouped || grouped.length === 0 || count === 0) {
+      container.innerHTML = `<div class="no-matches">
+        ${message || "No fixtures found for today."}
+        <div style="font-size:.8rem;margin-top:.4rem;color:var(--muted)">
+          Select teams manually above to predict any match.
+        </div>
+      </div>`;
       return;
     }
 
-    if (!matches || matches.length === 0) {
-      container.innerHTML = `<div class="no-matches">No matches scheduled today.</div>`;
-      return;
+    let html = "";
+
+    for (const contBlock of grouped) {
+      const contIcon = CONT_ICONS[contBlock.continent] || "🔘";
+      const totalMatches = contBlock.countries.reduce((sum, c) =>
+        sum + c.leagues.reduce((s2, l) => s2 + l.matches.length, 0), 0);
+
+      html += `<div class="continent-block">
+        <div class="continent-header" onclick="toggleContinent(this)">
+          <span>${contIcon}</span>
+          <span class="cont-name">${contBlock.continent}</span>
+          <span style="font-size:.72rem;color:var(--muted)">${totalMatches} matches</span>
+          <span class="continent-toggle">▼</span>
+        </div>
+        <div class="continent-body">`;
+
+      for (const ctry of contBlock.countries) {
+        const flag = COUNTRY_FLAGS[ctry.country] || "🏳";
+        const ctryMatches = ctry.leagues.reduce((s, l) => s + l.matches.length, 0);
+
+        for (const league of ctry.leagues) {
+          html += `<div class="country-block">
+            <div class="country-header" onclick="toggleLeague(this)">
+              <span class="country-flag">${flag}</span>
+              <span class="country-name">${ctry.country}</span>
+              <span class="league-name">– ${league.competition}</span>
+              <span class="match-count-badge">${league.matches.length}</span>
+            </div>
+            <div class="league-body">`;
+
+          for (const m of league.matches) {
+            const displayHome = m.home_team_display || m.home_team;
+            const displayAway = m.away_team_display || m.away_team;
+
+            const timeClass = m.status === "FINISHED" ? "ft"
+                            : m.status === "IN_PLAY"  ? "live" : "";
+
+            const timeLabel = m.status === "FINISHED" ? "FT"
+                            : m.status === "IN_PLAY"  ? "●LIVE"
+                            : m.kick_off || "–";
+
+            let scoreHtml = "";
+            if (m.score && m.status === "FINISHED") {
+              const [h,a] = m.score.split("-");
+              scoreHtml = `<span class="sc-num">${h}</span>
+                           <span class="sc-sep">-</span>
+                           <span class="sc-num">${a}</span>`;
+            } else if (m.status === "IN_PLAY" && m.score) {
+              scoreHtml = `<span class="sc-live">${m.score}</span>`;
+            } else {
+              scoreHtml = `<span style="color:var(--muted);font-size:.75rem">vs</span>`;
+            }
+
+            const actionHtml = m.can_predict
+              ? `<button class="btn-predict-small"
+                   onclick="quickPredict('${m.home_team}','${m.away_team}','${m.division}','${matchDate}')">
+                   ⚡ Predict
+                 </button>`
+              : `<span class="btn-no-model">No model</span>`;
+
+            html += `<div class="fixture-row">
+              <div class="fx-time ${timeClass}">${timeLabel}</div>
+              <div class="fx-team">${displayHome}</div>
+              <div class="fx-score">${scoreHtml}</div>
+              <div class="fx-team away">${displayAway}</div>
+              <div class="fx-action">${actionHtml}</div>
+            </div>`;
+          }
+
+          html += `</div></div>`;  // close league-body + country-block
+        }
+      }
+
+      html += `</div></div>`;  // close continent-body + continent-block
     }
 
-    // Group by competition
-    const byComp = {};
-    matches.forEach(m => {
-      const k = m.competition || m.division;
-      if (!byComp[k]) byComp[k] = [];
-      byComp[k].push(m);
-    });
-
-    let html = '<div class="matches-grid">';
-    matches.forEach(m => {
-      const statusClass = m.status === "FINISHED"  ? "status-finished"
-                        : m.status === "IN_PLAY" ||
-                          m.status === "PAUSED"    ? "status-live"
-                        :                            "status-scheduled";
-      const statusText  = m.status === "FINISHED"  ? "FT"
-                        : m.status === "IN_PLAY"   ? "LIVE"
-                        : m.status === "PAUSED"    ? "HT"
-                        : m.kick_off               ? `🕐 ${m.kick_off} UTC`
-                        : "Scheduled";
-
-      const scoreHtml = m.score
-        ? `<div class="fixture-score">${m.score}</div>`
-        : "";
-
-      const displayHome = m.home_team_display || m.home_team;
-      const displayAway = m.away_team_display || m.away_team;
-      const predictBtn = m.can_predict
-        ? `<button class="btn-predict-small"
-             onclick="quickPredict('${m.home_team}','${m.away_team}','${m.division}')">
-             ⚡ Predict
-           </button>`
-        : `<span style="font-size:.75rem;color:var(--muted)" title="Teams may need retraining">⚽ No model</span>`;
-
-      html += `
-        <div class="match-fixture">
-          <div class="fixture-comp">${m.competition}</div>
-          <div class="fixture-teams">
-            <span>${displayHome}</span>
-            <span class="fixture-vs">vs</span>
-            <span>${displayAway}</span>
-          </div>
-          ${scoreHtml}
-          <div class="fixture-meta">
-            <span class="fixture-time">${predictBtn}</span>
-            <span class="fixture-status ${statusClass}">${statusText}</span>
-          </div>
-        </div>`;
-    });
-    html += "</div>";
     container.innerHTML = html;
 
   } catch (err) {
-    container.innerHTML = `<div class="no-matches">Could not load fixtures. ${err.message || ""}</div>`;
+    container.innerHTML = `<div class="no-matches">Could not load fixtures: ${err.message}</div>`;
   }
 }
+
+function toggleContinent(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector(".continent-toggle");
+  const hidden = body.style.display === "none";
+  body.style.display = hidden ? "block" : "none";
+  if (arrow) arrow.textContent = hidden ? "▼" : "▶";
+}
+
+function toggleLeague(header) {
+  const body = header.nextElementSibling;
+  const hidden = body.style.display === "none";
+  body.style.display = hidden ? "block" : "none";
+}
+
 
 function quickPredict(homeTeam, awayTeam, division) {
   // Fill in the team inputs and scroll to predictor

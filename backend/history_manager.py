@@ -153,7 +153,7 @@ def check_results_from_fbref() -> int:
     for r in pending:
         try:
             ts = datetime.fromisoformat(r["timestamp"].rstrip("Z"))
-            if (datetime.utcnow() - ts).total_seconds() < 7200:
+            if (datetime.utcnow() - ts).total_seconds() < 5400:  # 90 min
                 continue
         except Exception:
             continue
@@ -184,8 +184,29 @@ def _lookup_full_result(home: str, away: str) -> dict | None:
     """
     from team_aliases import normalise
 
-    for delta in range(0, 6):
-        check_date = (datetime.utcnow() - timedelta(days=delta)).strftime("%Y-%m-%d")
+    # Build list of dates to check — if we have match_date, try it first
+    dates_to_try = []
+    if match_date:  # e.g. "2026-04-07" or "07-04-2026"
+        try:
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                try:
+                    dt = datetime.strptime(match_date.strip(), fmt)
+                    dates_to_try.append(dt.strftime("%Y-%m-%d"))
+                    # Also try day before/after for timezone drift
+                    dates_to_try.append((dt + timedelta(days=1)).strftime("%Y-%m-%d"))
+                    dates_to_try.append((dt - timedelta(days=1)).strftime("%Y-%m-%d"))
+                    break
+                except ValueError:
+                    continue
+        except Exception:
+            pass
+    # Then scan last 14 days as fallback
+    for delta in range(0, 14):
+        d_str = (datetime.utcnow() - timedelta(days=delta)).strftime("%Y-%m-%d")
+        if d_str not in dates_to_try:
+            dates_to_try.append(d_str)
+
+    for check_date in dates_to_try:
         url        = f"https://fbref.com/en/matches/{check_date}"
         try:
             html = requests.get(url, headers=HEADERS, timeout=15).text

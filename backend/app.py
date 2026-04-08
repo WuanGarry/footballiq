@@ -238,19 +238,17 @@ def api_model_status():
 @app.route("/api/today")
 def api_today():
     """
-    Returns today's fixtures scraped from FBRef.com.
-    No API key required — completely free.
-    Falls back to yesterday's results if no fixtures today.
+    Returns today's fixtures grouped by Continent → Country → League.
+    Times are in GMT. No API key required.
     """
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-
     from datetime import date as _date
 
     try:
-        from scrape_today import get_today_matches
+        from scrape_today import get_today_matches, group_by_continent_country
     except ImportError:
-        return _ok({"matches": [], "date": str(_date.today()),
+        return _ok({"grouped": [], "matches": [], "date": str(_date.today()),
                     "message": "scrape_today module not found"})
 
     try:
@@ -261,29 +259,27 @@ def api_today():
     try:
         raw_matches, match_date = get_today_matches()
     except Exception as e:
-        return _ok({"matches": [], "date": str(_date.today()),
+        return _ok({"grouped": [], "matches": [], "date": str(_date.today()),
                     "message": f"Scrape failed: {str(e)}"})
 
-    matches = []
+    # Normalise team names for prediction matching
     for m in raw_matches:
-        norm_home = normalise(m["home_team"], all_teams)
-        norm_away = normalise(m["away_team"], all_teams)
-        m["home_team_display"] = m["home_team"]  # keep original for display
+        m["home_team_display"] = m["home_team"]
         m["away_team_display"] = m["away_team"]
-        m["home_team"] = norm_home               # use normalised for predict
-        m["away_team"] = norm_away
-        m["can_predict"] = (
-            norm_home in all_teams and
-            norm_away in all_teams and
-            bool(m["division"])
-        )
-        matches.append(m)
+        norm_h = normalise(m["home_team"], all_teams)
+        norm_a = normalise(m["away_team"], all_teams)
+        m["home_team"]  = norm_h
+        m["away_team"]  = norm_a
+        m["can_predict"] = (norm_h in all_teams and norm_a in all_teams and bool(m["division"]))
+
+    grouped = group_by_continent_country(raw_matches)
 
     return _ok({
-        "matches": matches,
-        "date":    match_date,
-        "count":   len(matches),
-        "source":  "fbref.com"
+        "grouped":  grouped,
+        "matches":  raw_matches,
+        "date":     match_date,
+        "count":    len(raw_matches),
+        "source":   "fbref.com",
     })
 
 
