@@ -742,7 +742,19 @@ async function runPrediction() {
     });
     const json = await res.json();
     if (json.status !== "ok") return showError(json.message || "Prediction failed.");
+
     renderResults(json.data);
+
+    // Saved to server via API — notify history tab
+    saveToHistory(json.data, window._currentMatchDate || "");
+
+    // Show confirmation toast
+    const toast = document.createElement("div");
+    toast.textContent = "✓ Prediction saved to shared history";
+    toast.style.cssText = "position:fixed;bottom:20px;right:20px;background:#238636;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:9999;transition:opacity .5s";
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity="0"; setTimeout(()=>toast.remove(), 500); }, 2500);
+
   } catch (err) {
     showError("Network error – is the server running?");
   } finally {
@@ -750,6 +762,7 @@ async function runPrediction() {
     btn.innerHTML = `<span>⚡ Predict Match</span>`;
   }
 }
+
 
 // ── Render ────────────────────────────────────────────────────────────────
 function renderResults(d) {
@@ -870,7 +883,7 @@ document.addEventListener("keydown", e => {
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll(".tab-btn").forEach((b,i) => {
-    b.classList.toggle("active", b.textContent.toLowerCase().includes(name) ||
+    b.classList.toggle("active",
       (name==="predictor" && i===0) || (name==="history" && i===1));
   });
   document.querySelectorAll(".tab-panel").forEach(p => {
@@ -879,46 +892,87 @@ function switchTab(name) {
   if (name === "history") loadHistory();
 }
 
-// ── History loading ───────────────────────────────────────────────────────────
-let historyData = [];
+// ── Shared Prediction History ─────────────────────────────────────────────────
+// Server is the source of truth (shared across ALL devices).
+// localStorage is used only as a display cache to prevent flicker on load.
+
+const LS_CACHE_KEY = "wg_hist_cache";
+const LS_STATS_KEY = "wg_hist_stats";
+
+function lsCacheSet(records, stats) {
+  try {
+    localStorage.setItem(LS_CACHE_KEY, JSON.stringify(records));
+    localStorage.setItem(LS_STATS_KEY, JSON.stringify(stats));
+  } catch(e) {}
+}
+function lsCacheGet() {
+  try {
+    const r = JSON.parse(localStorage.getItem(LS_CACHE_KEY) || "[]");
+    const s = JSON.parse(localStorage.getItem(LS_STATS_KEY) || "{}");
+    return { records: r, stats: s };
+  } catch(e) { return { records: [], stats: {} }; }
+}
 
 async function loadHistory() {
-  try {
-    const res  = await fetch(`${API}/api/history?limit=100`);
-    const json = await res.json();
-    if (json.status !== "ok") return;
+  // Show cached version instantly
+  const cached = lsCacheGet();
+  if (cached.records.length > 0) {
+    renderHistoryStats(cached.stats);
+    renderHistoryTable(cached.records);
+  }
 
-    historyData = json.data.records || [];
-    renderHistoryStats(json.data.stats || {});
-    renderHistoryTable(historyData);
-  } catch (err) {
-    document.getElementById("historyTableWrap").innerHTML =
-      `<div class="history-empty"><div class="big-icon">⚠️</div><div>${err.message}</div></div>`;
+  // Then fetch fresh from server
+  try {
+    const res  = await fetch(`${API}/api/history?limit=200`);
+    const json = await res.json();
+    if (json.status !== "ok") throw new Error(json.message);
+
+    const { records, stats, backend } = json.data;
+    lsCacheSet(records, stats);
+
+    renderHistoryStats(stats);
+    renderHistoryTable(records);
+
+    // Show backend indicator
+    const badge = document.getElementById("storageBadge");
+    if (badge) {
+      if (backend === "jsonbin") {
+        badge.textContent = "☁️ Shared (all devices)";
+        badge.style.color = "#3fb950";
+      } else {
+        badge.textContent = "📁 Local server";
+        badge.style.color = "#e3b341";
+      }
+    }
+  } catch(err) {
+    // Server unavailable — just keep showing cache
+    const badge = document.getElementById("storageBadge");
+    if (badge) badge.textContent = "⚠ Server offline";
   }
 }
 
 function renderHistoryStats(s) {
-  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val ?? "–"; };
+  if (!s || !Object.keys(s).length) return;
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v??'–'; };
+  set("statTotal",      s.total_predictions ?? 0);
+  set("statCorrect",    s.correct ?? 0);
+  set("statWrong",      s.wrong ?? 0);
+  set("statAccuracy",   s.accuracy_pct!=null ? s.accuracy_pct+"%" : "–");
+  set("statGoalErr",    s.avg_goal_error!=null ? "±"+s.avg_goal_error : "–");
+  set("statCornerErr",  s.avg_corner_error!=null ? "±"+s.avg_corner_error : "–");
+  set("statBookingErr", s.avg_booking_error!=null ? "±"+s.avg_booking_error : "–");
+  set("statExact",      s.exact_scorelines!=null
+      ? s.exact_scorelines+" ("+s.exact_score_pct+"%)" : "–");
 
-  set("statTotal",    s.total_predictions ?? 0);
-  set("statCorrect",  s.correct ?? 0);
-  set("statWrong",    s.wrong ?? 0);
-  set("statAccuracy", s.accuracy_pct != null ? s.accuracy_pct + "%" : "–");
-  set("statGoalErr",    s.avg_goal_error    != null ? "±" + s.avg_goal_error    : "–");
-  set("statCornerErr",  s.avg_corner_error  != null ? "±" + s.avg_corner_error  : "–");
-  set("statBookingErr", s.avg_booking_error != null ? "±" + s.avg_booking_error : "–");
-  set("statExact",      s.exact_scorelines  != null ? s.exact_scorelines + " (" + (s.exact_score_pct ?? 0) + "%)" : "–");
-
-  // Accuracy bar
-  const pct  = s.accuracy_pct ?? 0;
+  const pct  = parseFloat(s.accuracy_pct) || 0;
   const fill = document.getElementById("accuracyBarFill");
   const left = document.getElementById("accuracyLeft");
   const right= document.getElementById("accuracyRight");
   const note = document.getElementById("pendingNote");
-  if (fill)  fill.style.width = pct + "%";
-  if (left)  left.textContent  = `${s.correct ?? 0} correct of ${s.resolved ?? 0} resolved`;
-  if (right) right.textContent = pct ? pct + "%" : "No results yet";
-  if (note && s.pending)  note.textContent = `(${s.pending} pending)`;
+  if (fill)  fill.style.width  = pct + "%";
+  if (left)  left.textContent  = `${s.correct??0} correct of ${s.resolved??0} resolved`;
+  if (right) right.textContent = pct ? pct+"%" : "No results yet";
+  if (note)  note.textContent  = s.pending ? `(${s.pending} pending)` : "";
 }
 
 function renderHistoryTable(records) {
@@ -927,7 +981,7 @@ function renderHistoryTable(records) {
     wrap.innerHTML = `<div class="history-empty">
       <div class="big-icon">📋</div>
       <div style="font-size:1rem;font-weight:600;margin-bottom:.4rem">No predictions yet</div>
-      <div style="font-size:.85rem">Make a prediction above — it will appear here automatically</div>
+      <div style="font-size:.85rem">Make a prediction above — it will appear here on all devices</div>
     </div>`;
     return;
   }
@@ -941,92 +995,75 @@ function renderHistoryTable(records) {
     if (s==="wrong")   return `<span class="badge badge-wrong">✗ Wrong</span>`;
     return `<span class="badge badge-pending">⏳ Pending</span>`;
   };
-  const fmt = v => v != null ? v : "–";
-  const fmtErr = v => v != null ? `<span style="color:var(--muted)">±${v}</span>` : "–";
+  const fmtErr = v => v!=null ? `<span style="color:var(--muted)">±${v}</span>` : "–";
 
   const rows = records.map(r => {
-    const dt = r.timestamp ? r.timestamp.slice(0,10) : "–";
-
-    // Predicted line
-    const predScore  = `${r.pred_home_goals?.toFixed(1) ?? "?"}–${r.pred_away_goals?.toFixed(1) ?? "?"}`;
-    const predCrn    = r.pred_home_corners != null ? `${r.pred_home_corners}/${r.pred_away_corners}` : "–";
-    const predBk     = r.pred_home_bookings != null ? `${r.pred_home_bookings}/${r.pred_away_bookings}` : "–";
-
-    // Actual line
-    const actScore   = r.actual_home_goals != null
+    const dt         = r.timestamp ? r.timestamp.slice(0,10) : "–";
+    const predScore  = `${(r.pred_home_goals||0).toFixed(1)}–${(r.pred_away_goals||0).toFixed(1)}`;
+    const predCrn    = r.pred_home_corners!=null ? `${r.pred_home_corners}/${r.pred_away_corners}` : "–";
+    const predBk     = r.pred_home_bookings!=null ? `${r.pred_home_bookings}/${r.pred_away_bookings}` : "–";
+    const actScore   = r.actual_home_goals!=null
       ? `<strong style="color:${r.result_correct?'#3fb950':'#f85149'}">${r.actual_home_goals}–${r.actual_away_goals}</strong>`
-      : `<span style="color:var(--muted);font-size:.8rem">–</span>`;
-    const actCrn     = r.actual_home_corners != null
-      ? `${r.actual_home_corners}/${r.actual_away_corners}` : "–";
-    const actBk      = r.actual_home_bookings != null
-      ? `${r.actual_home_bookings}/${r.actual_away_bookings}` : "–";
+      : `<span style="color:var(--muted)">–</span>`;
+    const actCrn     = r.actual_home_corners!=null ? `${r.actual_home_corners}/${r.actual_away_corners}` : "–";
+    const actBk      = r.actual_home_bookings!=null ? `${r.actual_home_bookings}/${r.actual_away_bookings}` : "–";
+    const top3html   = (r.top_scorelines||[]).map(s => {
+      const hit = r.actual_home_goals!=null && s.scoreline===`${r.actual_home_goals}-${r.actual_away_goals}`;
+      return `<span style="font-size:.7rem;${hit?'color:#e3b341;font-weight:700':''}">${s.scoreline}(${s.probability}%)</span>`;
+    }).join(" ");
+    const inTop3 = r.scoreline_in_top3===true
+      ? `<span title="Score was in top 3!" style="color:#e3b341"> 🎯</span>` : "";
 
-    // Top 3 scorelines
-    const top3html = (r.top_scorelines||[]).map((s,i) =>
-      `<span class="${r.actual_home_goals != null && s.scoreline===r.actual_home_goals+'-'+r.actual_away_goals ? 'badge badge-correct' : ''}"
-             style="font-size:.72rem;margin-right:3px;${i===0?'font-weight:700':''}">${s.scoreline}(${s.probability}%)</span>`
-    ).join(" ");
-
-    // Entry form for pending
     const entryBtn = r.status === "pending" ? `
       <button class="enter-result-btn" onclick="showResultForm(${r.id})">✏️ Enter Result</button>
       <div id="form-${r.id}" style="display:none;margin-top:.5rem">
-        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Enter actual match result:</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.25rem">Actual score:</div>
         <div class="inline-form">
-          <span style="font-size:.78rem;color:var(--muted)">${r.home_team}</span>
-          <input type="number" id="fhg-${r.id}" min="0" max="20" placeholder="H" title="Home goals"/>
+          <span style="font-size:.72rem">${r.home_team}</span>
+          <input type="number" id="fhg-${r.id}" min="0" max="20" placeholder="H"/>
           <span>–</span>
-          <input type="number" id="fag-${r.id}" min="0" max="20" placeholder="A" title="Away goals"/>
-          <span style="font-size:.78rem;color:var(--muted)">${r.away_team}</span>
+          <input type="number" id="fag-${r.id}" min="0" max="20" placeholder="A"/>
+          <span style="font-size:.72rem">${r.away_team}</span>
         </div>
-        <div class="inline-form" style="margin-top:.3rem">
-          <span style="font-size:.72rem;color:var(--muted)">Corners H/A:</span>
-          <input type="number" id="fhc-${r.id}" min="0" max="30" placeholder="H" style="width:50px"/>
+        <div class="inline-form" style="margin-top:.25rem">
+          <span style="font-size:.7rem;color:var(--muted)">Corners H/A:</span>
+          <input type="number" id="fhc-${r.id}" min="0" max="30" placeholder="H" style="width:46px"/>
           <span>/</span>
-          <input type="number" id="fac-${r.id}" min="0" max="30" placeholder="A" style="width:50px"/>
-          <span style="font-size:.72rem;color:var(--muted)">Bookings H/A:</span>
-          <input type="number" id="fhb-${r.id}" min="0" max="15" placeholder="H" style="width:50px"/>
+          <input type="number" id="fac-${r.id}" min="0" max="30" placeholder="A" style="width:46px"/>
+          <span style="font-size:.7rem;color:var(--muted);margin-left:.3rem">Cards H/A:</span>
+          <input type="number" id="fhb-${r.id}" min="0" max="15" placeholder="H" style="width:46px"/>
           <span>/</span>
-          <input type="number" id="fab-${r.id}" min="0" max="15" placeholder="A" style="width:50px"/>
+          <input type="number" id="fab-${r.id}" min="0" max="15" placeholder="A" style="width:46px"/>
           <button class="save-btn" onclick="submitResult(${r.id})">💾 Save</button>
         </div>
       </div>` : "";
 
-    const inTop3 = r.scoreline_in_top3 === true
-      ? `<span title="Scoreline was in top 3 predictions" style="color:#e3b341">🎯</span>` : "";
-
     return `<tr>
-      <td style="color:var(--muted);font-size:.78rem;white-space:nowrap">${dt}</td>
+      <td style="color:var(--muted);font-size:.75rem;white-space:nowrap">${dt}</td>
       <td>
-        <div style="font-weight:700;font-size:.9rem">${r.home_team}</div>
-        <div style="color:var(--muted);font-size:.78rem">vs ${r.away_team}</div>
-        <div style="font-size:.72rem;color:var(--muted)">${r.division||""}</div>
+        <div style="font-weight:700;font-size:.85rem">${r.home_team}</div>
+        <div style="color:var(--muted);font-size:.73rem">vs ${r.away_team}</div>
+        <div style="font-size:.7rem;color:var(--muted)">${r.division||""}</div>
       </td>
       <td>
         ${rb(r.pred_result)}
-        <div style="font-size:.78rem;color:var(--muted);margin-top:.2rem">
-          ⚽ ${predScore} xG<br>
-          🚩 ${predCrn} crn<br>
-          🟡 ${predBk} bk
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">
+          ⚽ ${predScore} xG<br>🚩 ${predCrn} crn<br>🟡 ${predBk} bk
         </div>
-        <div style="margin-top:.3rem">${top3html}</div>
+        <div style="margin-top:.2rem;font-size:.7rem">${top3html}</div>
       </td>
       <td>
-        ${actScore}
-        <div style="font-size:.78rem;color:var(--muted);margin-top:.2rem">
-          🚩 ${actCrn} crn<br>
-          🟡 ${actBk} bk
+        ${actScore}${inTop3}
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">
+          🚩 ${actCrn} crn<br>🟡 ${actBk} bk
         </div>
-        ${inTop3}
       </td>
       <td>
         ${sb(r.status)}
-        <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">
-          ${r.actual_result ? rb(r.actual_result) : ""}
-        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${r.actual_result||""}</div>
         ${entryBtn}
       </td>
-      <td style="font-size:.8rem">
+      <td style="font-size:.78rem">
         <div>⚽ ${fmtErr(r.goals_error)}</div>
         <div>🚩 ${fmtErr(r.corners_error)}</div>
         <div>🟡 ${fmtErr(r.bookings_error)}</div>
@@ -1034,40 +1071,33 @@ function renderHistoryTable(records) {
     </tr>`;
   }).join("");
 
-  wrap.innerHTML = `
-    <div style="overflow-x:auto">
-    <table class="history-table" style="min-width:700px">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Match</th>
-          <th>Predicted</th>
-          <th>Actual</th>
-          <th>Outcome</th>
-          <th>Error</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-    </div>`;
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="history-table" style="min-width:700px">
+    <thead><tr>
+      <th>Date</th><th>Match</th><th>Predicted</th>
+      <th>Actual</th><th>Outcome</th><th>Error</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
 }
 
+function showResultForm(id) {
+  const f = document.getElementById(`form-${id}`);
+  if (f) f.style.display = f.style.display==="none" ? "block" : "none";
+}
 
 async function submitResult(id) {
   const hg = parseInt(document.getElementById(`fhg-${id}`)?.value);
   const ag = parseInt(document.getElementById(`fag-${id}`)?.value);
+  if (isNaN(hg)||isNaN(ag)) { alert("Goals required"); return; }
+
   const hc = document.getElementById(`fhc-${id}`)?.value;
   const ac = document.getElementById(`fac-${id}`)?.value;
   const hb = document.getElementById(`fhb-${id}`)?.value;
   const ab = document.getElementById(`fab-${id}`)?.value;
 
-  if (isNaN(hg) || isNaN(ag)) {
-    alert("Goals are required (home and away)");
-    return;
-  }
   const payload = { id, actual_home: hg, actual_away: ag };
-  if (hc && ac) { payload.actual_home_corners = parseInt(hc); payload.actual_away_corners = parseInt(ac); }
-  if (hb && ab) { payload.actual_home_bookings = parseInt(hb); payload.actual_away_bookings = parseInt(ab); }
+  if (hc&&ac) { payload.actual_home_corners=parseInt(hc); payload.actual_away_corners=parseInt(ac); }
+  if (hb&&ab) { payload.actual_home_bookings=parseInt(hb); payload.actual_away_bookings=parseInt(ab); }
 
   try {
     const res  = await fetch(`${API}/api/history/update`, {
@@ -1078,92 +1108,40 @@ async function submitResult(id) {
     const json = await res.json();
     if (json.status === "ok") loadHistory();
     else alert("Save failed: " + (json.message||"Unknown error"));
-  } catch (err) {
+  } catch(err) {
     alert("Failed: " + err.message);
   }
 }
 
-function showResultForm(id) {
-  const form = document.getElementById(`form-${id}`);
-  if (form) form.style.display = form.style.display === "none" ? "block" : "none";
-}
-
-
 async function autoCheckResults() {
-  const btn = event.target;
-  btn.textContent = "🔍 Checking...";
-  btn.disabled = true;
+  const btn = event?.target;
+  if (btn) { btn.textContent = "🔍 Checking..."; btn.disabled=true; }
   try {
-    const res  = await fetch(`${API}/api/history/auto-check`, { method: "POST" });
+    const res  = await fetch(`${API}/api/history/auto-check`, { method:"POST" });
     const json = await res.json();
     if (json.status === "ok") {
       const n = json.data.resolved;
-      btn.textContent = n > 0 ? `✓ Found ${n} results` : "✓ No new results";
-      setTimeout(() => { btn.textContent = "🔍 Auto-Check Results"; btn.disabled = false; }, 2000);
-      if (n > 0) loadHistory();
+      if (btn) btn.textContent = n>0 ? `✓ Found ${n}` : "🔍 Auto-Check";
+      setTimeout(() => { if(btn){btn.textContent="🔍 Auto-Check";btn.disabled=false;} }, 3000);
+      if (n>0) loadHistory();
     }
-  } catch (err) {
-    btn.textContent = "⚠ Failed";
-    btn.disabled = false;
+  } catch(e) {
+    if (btn) { btn.textContent="🔍 Auto-Check"; btn.disabled=false; }
   }
 }
 
-// Also save match_date when predicting from today's fixtures
-const _origQuickPredict = quickPredict;
-quickPredict = function(homeTeam, awayTeam, division, matchDate) {
-  document.getElementById("homeTeamInput").value = homeTeam;
-  document.getElementById("awayTeamInput").value = awayTeam;
-  const sel = document.getElementById("divisionSelect");
-  for (let i = 0; i < sel.options.length; i++) {
-    if (sel.options[i].value === division) { sel.selectedIndex = i; break; }
+// saveToHistory — called after every prediction (saves to server)
+async function saveToHistory(prediction, matchDate) {
+  // Already saved server-side via the /api/predict endpoint
+  // Just refresh the history view if the tab is open
+  const histTab = document.getElementById("tab-history");
+  if (histTab && histTab.classList.contains("active")) {
+    loadHistory();
   }
-  window._currentMatchDate = matchDate || "";
-  switchTab("predictor");
-  setTimeout(() => runPrediction(), 200);
-};
+  // Also update the badge count if visible
+  const total = (lsCacheGet().records.length || 0) + 1;
+}
 
-// Patch runPrediction to include match_date and history_id
-const _origRunPrediction = runPrediction;
-runPrediction = async function() {
-  const homeTeam = document.getElementById("homeTeamInput").value.trim();
-  const awayTeam = document.getElementById("awayTeamInput").value.trim();
-  const division = document.getElementById("divisionSelect").value;
-
-  hideError();
-  if (!homeTeam || !awayTeam) return showError("Please enter both teams.");
-  if (homeTeam === awayTeam)  return showError("Home and away teams must be different.");
-
-  const btn = document.getElementById("predictBtn");
-  btn.disabled = true;
-  btn.innerHTML = `<div class="spinner"></div> <span>Predicting …</span>`;
-
-  try {
-    const res = await fetch(`${API}/api/predict`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        home_team:    homeTeam,
-        away_team:    awayTeam,
-        division,
-        match_date:   window._currentMatchDate || "",
-        save_history: true,
-      }),
-    });
-    const json = await res.json();
-    if (json.status !== "ok") return showError(json.message || "Prediction failed.");
-    renderResults(json.data);
-    if (json.data.history_id) {
-      window._lastHistoryId = json.data.history_id;
-    }
-  } catch (err) {
-    showError("Network error – is the server running?");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<span>⚡ Predict Match</span>`;
-  }
-};
-
-// ── Today's Matches ───────────────────────────────────────────────────────
 // ── Today's Matches — Flashscore style ──────────────────────────────────────
 const COUNTRY_FLAGS = {
   "England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Wales":"🏴󠁧󠁢󠁷󠁬󠁳󠁿",

@@ -244,28 +244,46 @@ def _get_page(url, retries=3):
     return None
 
 
-def _parse_time_to_gmt(raw_time: str) -> str:
+def _parse_time_to_ghana(raw_time: str) -> str:
     """
-    FBRef shows times in EST (UTC-5) during winter or EDT (UTC-4) during summer.
-    We convert to GMT (UTC+0) and label it GMT.
-    Alternatively FBRef may already show UTC — we keep it as is.
+    Convert FBRef time to Ghana time (UTC+0 = GMT).
+    Ghana has NO daylight saving — always UTC+0.
+    
+    FBRef shows times in:
+    - ET (Eastern Time): UTC-5 (Nov-Mar) or UTC-4 (Apr-Oct)
+    - Sometimes already UTC
+    
+    April–October: FBRef ET = UTC-4, so add 4h to get Ghana (UTC+0)
+    November–March: FBRef ET = UTC-5, so add 5h to get Ghana (UTC+0)
     """
-    if not raw_time or raw_time.strip() in ("", "–", "-"):
+    if not raw_time or raw_time.strip() in ("", "–", "-", "TBD", "TBA"):
         return ""
-    raw_time = raw_time.strip()
-    # If it already contains UTC or GMT, strip and reformat
-    for suffix in (" UTC", " GMT", "UTC", "GMT"):
-        if raw_time.endswith(suffix):
-            return raw_time.replace(suffix, "").strip() + " GMT"
-    # FBRef US times are EST (UTC-5) — add 5 hours
+    raw = raw_time.strip()
+    
+    # Already labeled as UTC/GMT — just relabel as Ghana time
+    for suffix in (" UTC", " GMT", "UTC", "GMT", "Z"):
+        if raw.upper().endswith(suffix.upper()):
+            t_part = raw[:raw.upper().rfind(suffix.upper())].strip()
+            return t_part + " (GH)"
+    
+    # Parse HH:MM
     try:
-        t = datetime.strptime(raw_time, "%H:%M")
-        # FBRef shows ET (UTC-5 standard, UTC-4 summer)
-        # Simple heuristic: add 5 hours for GMT
-        gmt = t.replace(hour=(t.hour + 5) % 24)
-        return gmt.strftime("%H:%M") + " GMT"
+        t = datetime.strptime(raw, "%H:%M")
     except ValueError:
-        return raw_time + " GMT"
+        try:
+            t = datetime.strptime(raw, "%I:%M %p")
+        except ValueError:
+            return raw + " (GH)"
+    
+    # Determine ET offset based on current month
+    # DST: 2nd Sunday March → 1st Sunday November (US)
+    from datetime import date as _date
+    month = _date.today().month
+    et_to_utc = 4 if 3 <= month <= 10 else 5  # hours to ADD to ET to get UTC/Ghana
+    
+    ghana_hour = (t.hour + et_to_utc) % 24
+    day_cross  = "+" if t.hour + et_to_utc >= 24 else ""
+    return f"{ghana_hour:02d}:{t.minute:02d}{day_cross} (GH)"
 
 
 def scrape_fixtures(target_date: str = None) -> list:
@@ -335,7 +353,7 @@ def scrape_fixtures(target_date: str = None) -> list:
                     status = "SCHEDULED"
 
                 raw_time = cell("time") or cell("start_time") or ""
-                kick_off = _parse_time_to_gmt(raw_time)
+                kick_off = _parse_time_to_ghana(raw_time)
 
                 # Look up meta
                 meta = LEAGUE_META.get(comp_name)
@@ -350,6 +368,10 @@ def scrape_fixtures(target_date: str = None) -> list:
 
                 continent, country, div_code = meta
 
+                # Only show SCHEDULED matches — remove started/finished
+                if status in ("IN_PLAY", "FINISHED", "PAUSED"):
+                    continue
+
                 matches.append({
                     "home_team":   home,
                     "away_team":   away,
@@ -359,7 +381,7 @@ def scrape_fixtures(target_date: str = None) -> list:
                     "continent":   continent,
                     "kick_off":    kick_off,
                     "status":      status,
-                    "score":       score if status == "FINISHED" else "",
+                    "score":       "",  # only scheduled matches shown
                 })
             except Exception:
                 continue

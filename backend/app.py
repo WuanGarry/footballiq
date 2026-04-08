@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import predictor
 import history_manager
+import shared_store
 from team_aliases import normalise
 
 BASE_DIR     = Path(__file__).resolve().parent.parent
@@ -159,12 +160,11 @@ def api_predict():
 
     try:
         result = predictor.predict(home_team, away_team, division)
-        # Save to history if client requests it (default: yes)
-        if body.get("save_history", True):
-            match_date = body.get("match_date", "")
-            result["match_date"] = match_date
-            saved = history_manager.save_prediction(result)
-            result["history_id"] = saved["id"]
+        # Save to shared store (all devices see this)
+        match_date = body.get("match_date", "")
+        result["match_date"] = match_date
+        saved = shared_store.add_prediction(result, match_date)
+        result["history_id"] = saved["id"]
         return _ok(result)
     except Exception as exc:
         app.logger.exception("Prediction error")
@@ -285,29 +285,47 @@ def api_today():
 
 
 
+@app.route("/api/storage-status")
+def api_storage_status():
+    """Shows which backend is storing predictions."""
+    return _ok({
+        "backend":      "jsonbin" if shared_store.using_jsonbin() else "local_file",
+        "shared":       shared_store.using_jsonbin(),
+        "jsonbin_configured": bool(shared_store.JSONBIN_KEY and shared_store.JSONBIN_BIN_ID),
+        "setup_instructions": (
+            "Set JSONBIN_KEY and JSONBIN_BIN_ID in Render environment variables "
+            "for shared predictions across all devices. "
+            "Get a free key at https://jsonbin.io"
+        ) if not shared_store.using_jsonbin() else "JSONBin configured ✓"
+    })
+
+
 # ── Prediction History ─────────────────────────────────────────────────────────
 
 @app.route("/api/history")
 def api_history():
     limit    = int(request.args.get("limit", 100))
     division = request.args.get("division", None)
-    data     = history_manager.get_history(limit=limit, division=division)
-    return _ok(data)
+    records  = shared_store.load()
+    if division:
+        records = [r for r in records if r.get("division") == division]
+    stats    = shared_store.get_stats(shared_store.load())
+    return _ok({"records": records[:limit], "stats": stats,
+                "backend": stats.get("backend","local_file")})
 
 
 @app.route("/api/history/update", methods=["POST"])
 def api_history_update():
     body = request.get_json(force=True, silent=True) or {}
-    record_id           = body.get("id")
-    actual_home         = body.get("actual_home")
-    actual_away         = body.get("actual_away")
-    actual_home_corners = body.get("actual_home_corners")
-    actual_away_corners = body.get("actual_away_corners")
-    if record_id is None or actual_home is None or actual_away is None:
+    rid  = body.get("id")
+    ah   = body.get("actual_home")
+    aa   = body.get("actual_away")
+    if rid is None or ah is None or aa is None:
         return _err("Required: id, actual_home, actual_away")
-    updated = history_manager.update_result(
-        int(record_id), int(actual_home), int(actual_away),
-        actual_home_corners, actual_away_corners
+    updated = shared_store.resolve_prediction(
+        int(rid), int(ah), int(aa),
+        body.get("actual_home_corners"), body.get("actual_away_corners"),
+        body.get("actual_home_bookings"), body.get("actual_away_bookings"),
     )
     return _ok({"record": updated})
 
