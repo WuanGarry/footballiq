@@ -390,3 +390,106 @@ def seed():
 
 if __name__ == "__main__":
     seed()
+
+# ── Additional teams seed data ─────────────────────────────────────────────────
+# Ensures missing teams are always in the model
+EXTRA_TEAMS_SEED = [
+    # EPL missing teams
+    ("01-09-2024","Nottm Forest","Crystal Palace","H",1,0,"E0"),
+    ("08-09-2024","Bournemouth","Brentford","D",1,1,"E0"),
+    ("15-09-2024","Fulham","Leicester","H",2,1,"E0"),
+    ("22-09-2024","Southampton","Ipswich","D",0,0,"E0"),
+    ("29-09-2024","Sheffield Utd","Luton","H",2,1,"E1"),
+    # La Liga missing
+    ("01-09-2024","Betis","Osasuna","H",2,1,"SP1"),
+    ("08-09-2024","Celta","Leganes","H",3,1,"SP1"),
+    ("15-09-2024","Girona","Alaves","H",2,0,"SP1"),
+    ("22-09-2024","Las Palmas","Rayo Vallecano","D",1,1,"SP1"),
+    ("29-09-2024","Espanyol","Getafe","H",1,0,"SP2"),
+    # Bundesliga missing
+    ("01-09-2024","Augsburg","Mainz","H",2,1,"D1"),
+    ("08-09-2024","Monchengladbach","Freiburg","D",1,1,"D1"),
+    ("15-09-2024","Hoffenheim","Heidenheim","H",2,0,"D1"),
+    ("22-09-2024","Cologne","Darmstadt","H",3,0,"D2"),
+    # Serie A missing
+    ("01-09-2024","Cagliari","Empoli","D",1,1,"I1"),
+    ("08-09-2024","Lecce","Frosinone","H",1,0,"I1"),
+    ("15-09-2024","Genoa","Verona","H",2,1,"I1"),
+    ("22-09-2024","Sassuolo","Udinese","A",0,2,"I1"),
+    ("29-09-2024","Salernitana","Monza","D",0,0,"I1"),
+    # Ligue 1 missing
+    ("01-09-2024","Reims","Metz","H",2,0,"F1"),
+    ("08-09-2024","Brest","Montpellier","H",3,1,"F1"),
+    ("15-09-2024","Nantes","Clermont","H",1,0,"F1"),
+    # Eredivisie missing
+    ("01-09-2024","Twente","Utrecht","H",2,1,"N1"),
+    ("08-09-2024","AZ Alkmaar","Heracles","H",3,0,"N1"),
+    ("15-09-2024","Sparta Rotterdam","NEC Nijmegen","H",1,0,"N1"),
+    # Turkish missing
+    ("01-09-2024","Trabzonspor","Sivasspor","H",2,0,"T1"),
+    ("08-09-2024","Alanyaspor","Kasimpasa","D",1,1,"T1"),
+    ("15-09-2024","Ankaragucu","Besiktas","A",1,2,"T1"),
+    # Norwegian missing
+    ("01-06-2024","Bodo/Glimt","Molde","H",3,1,"NO1"),
+    ("08-06-2024","Brann","Viking","H",2,1,"NO1"),
+    ("15-06-2024","Rosenborg","Lillestrom","H",1,0,"NO1"),
+    ("22-06-2024","Valerenga","Sarpsborg","D",1,1,"NO1"),
+    ("29-06-2024","Stromsgodset","Odd","H",2,0,"NO1"),
+    # Copa Libertadores missing
+    ("01-04-2024","River Plate","Colo-Colo","H",2,0,"COPLIB"),
+    ("08-04-2024","Flamengo","Independiente del Valle","H",3,1,"COPLIB"),
+    ("15-04-2024","Palmeiras","Olimpia","H",2,1,"COPLIB"),
+    # Ghana missing
+    ("01-11-2024","Dreams FC","Legon Cities","H",2,0,"GPL"),
+    ("08-11-2024","Tamale City","Nsoatreman","H",1,0,"GPL"),
+    ("15-11-2024","Berekum Chelsea","Karela United","H",2,1,"GPL"),
+    ("22-11-2024","Gold Stars","Eleven Wonders","D",0,0,"GPL"),
+    ("29-11-2024","King Faisal","Aduana Stars","A",1,2,"GPL"),
+]
+
+
+def seed_extra_teams():
+    """Add the extra teams seed data to Matches.csv"""
+    import os, sys
+    from pathlib import Path
+    import pandas as pd
+
+    DATA_DIR = Path(os.environ.get("DATA_DIR",
+               str(Path(__file__).resolve().parent.parent / "data")))
+    matches_path = DATA_DIR / "Matches.csv"
+    if not matches_path.exists():
+        print("Matches.csv not found — skipping extra teams seed")
+        return
+
+    existing = pd.read_csv(matches_path, low_memory=False)
+    rows = []
+    for date, home, away, ftr, fth, fta, div in EXTRA_TEAMS_SEED:
+        rows.append({
+            "Division": div, "MatchDate": date, "MatchTime": "",
+            "HomeTeam": home, "AwayTeam": away,
+            "HomeElo": "", "AwayElo": "",
+            "Form3Home": "", "Form5Home": "", "Form3Away": "", "Form5Away": "",
+            "FTHome": fth, "FTAway": fta, "FTResult": ftr,
+            "HTHome": "", "HTAway": "", "HTResult": "",
+            "HomeCorners": "", "AwayCorners": "",
+            "HomeYellow": "", "AwayYellow": "",
+            "HomeRed": "", "AwayRed": "",
+            "HomeShots": "", "AwayShots": "",
+        })
+    new_df   = pd.DataFrame(rows)
+    for col in existing.columns:
+        if col not in new_df.columns:
+            new_df[col] = ""
+    new_df   = new_df[[c for c in existing.columns if c in new_df.columns]]
+    combined = pd.concat([existing, new_df], ignore_index=True)
+    combined = combined.drop_duplicates(
+        subset=["MatchDate", "HomeTeam", "AwayTeam"], keep="first"
+    )
+    combined.to_csv(matches_path, index=False)
+    print(f"Extra teams seeded: {len(rows)} matches added")
+    print(f"New teams include: Bodo/Glimt, River Plate, Flamengo, Dreams FC, etc.")
+
+
+if __name__ == "__main__":
+    seed()
+    seed_extra_teams()

@@ -738,22 +738,53 @@ async function runPrediction() {
     const res = await fetch(`${API}/api/predict`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ home_team: homeTeam, away_team: awayTeam, division }),
+      body: JSON.stringify({ home_team: homeTeam, away_team: awayTeam, division, force: !!window._forcePrediction }),
     });
     const json = await res.json();
     if (json.status !== "ok") return showError(json.message || "Prediction failed.");
+
+    // Handle duplicate match
+    if (json.data.duplicate) {
+      const d = json.data;
+      hideError();
+      // Show a prominent notice
+      const dupBox = document.getElementById("duplicateBox") || (() => {
+        const el = document.createElement("div");
+        el.id = "duplicateBox";
+        el.style.cssText = "margin-top:1rem;padding:1rem 1.2rem;background:rgba(227,179,65,.12);border:1px solid rgba(227,179,65,.4);border-radius:10px;display:none";
+        document.getElementById("predictBtn").insertAdjacentElement("afterend", el);
+        return el;
+      })();
+      dupBox.innerHTML = `
+        <div style="font-size:.9rem;font-weight:700;color:#e3b341;margin-bottom:.4rem">
+          ⚠ Already Predicted
+        </div>
+        <div style="font-size:.85rem;color:var(--text);margin-bottom:.6rem">
+          <strong>${d.message || `${json.data.home_team || ""} vs ${json.data.away_team || ""} was already predicted.`}</strong>
+        </div>
+        <div style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem">
+          Predicted result: <strong style="color:var(--text)">${d.predicted_result || ""}</strong>
+          &nbsp;|&nbsp; On: ${(d.timestamp||"").slice(0,10)}
+        </div>
+        <button onclick="switchTab('history');document.getElementById('duplicateBox').style.display='none';"
+          style="padding:.4rem 1rem;background:var(--accent2);color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:.82rem;margin-right:.5rem">
+          📊 View in History
+        </button>
+        <button onclick="forcePrediction()"
+          style="padding:.4rem 1rem;background:rgba(255,255,255,.07);color:var(--muted);border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:.82rem">
+          Re-predict anyway
+        </button>`;
+      dupBox.style.display = "block";
+      return;
+    }
 
     renderResults(json.data);
 
     // Saved to server via API — notify history tab
     saveToHistory(json.data, window._currentMatchDate || "");
 
-    // Show confirmation toast
-    const toast = document.createElement("div");
-    toast.textContent = "✓ Prediction saved to shared history";
-    toast.style.cssText = "position:fixed;bottom:20px;right:20px;background:#238636;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:9999;transition:opacity .5s";
-    document.body.appendChild(toast);
-    setTimeout(() => { toast.style.opacity="0"; setTimeout(()=>toast.remove(), 500); }, 2500);
+    // Toast notification
+    showToast("✓ Prediction saved — visible on all devices", "#238636");
 
   } catch (err) {
     showError("Network error – is the server running?");
@@ -1006,7 +1037,9 @@ function renderHistoryTable(records) {
       ? `<strong style="color:${r.result_correct?'#3fb950':'#f85149'}">${r.actual_home_goals}–${r.actual_away_goals}</strong>`
       : `<span style="color:var(--muted)">–</span>`;
     const actCrn     = r.actual_home_corners!=null ? `${r.actual_home_corners}/${r.actual_away_corners}` : "–";
-    const actBk      = r.actual_home_bookings!=null ? `${r.actual_home_bookings}/${r.actual_away_bookings}` : "–";
+    const actYlw  = r.actual_home_yellows!=null ? `🟡${r.actual_home_yellows}/${r.actual_away_yellows}` : "";
+    const actRed  = r.actual_home_reds!=null    ? ` 🔴${r.actual_home_reds}/${r.actual_away_reds}` : "";
+    const actBk   = (actYlw||actRed) ? actYlw+actRed : (r.actual_home_bookings!=null ? `${r.actual_home_bookings}/${r.actual_away_bookings}` : "–");
     const top3html   = (r.top_scorelines||[]).map(s => {
       const hit = r.actual_home_goals!=null && s.scoreline===`${r.actual_home_goals}-${r.actual_away_goals}`;
       return `<span style="font-size:.7rem;${hit?'color:#e3b341;font-weight:700':''}">${s.scoreline}(${s.probability}%)</span>`;
@@ -1025,15 +1058,19 @@ function renderHistoryTable(records) {
           <input type="number" id="fag-${r.id}" min="0" max="20" placeholder="A"/>
           <span style="font-size:.72rem">${r.away_team}</span>
         </div>
-        <div class="inline-form" style="margin-top:.25rem">
+        <div class="inline-form" style="margin-top:.25rem;flex-wrap:wrap">
           <span style="font-size:.7rem;color:var(--muted)">Corners H/A:</span>
-          <input type="number" id="fhc-${r.id}" min="0" max="30" placeholder="H" style="width:46px"/>
+          <input type="number" id="fhc-${r.id}" min="0" max="30" placeholder="H" style="width:44px"/>
           <span>/</span>
-          <input type="number" id="fac-${r.id}" min="0" max="30" placeholder="A" style="width:46px"/>
-          <span style="font-size:.7rem;color:var(--muted);margin-left:.3rem">Cards H/A:</span>
-          <input type="number" id="fhb-${r.id}" min="0" max="15" placeholder="H" style="width:46px"/>
+          <input type="number" id="fac-${r.id}" min="0" max="30" placeholder="A" style="width:44px"/>
+          <span style="font-size:.7rem;color:var(--muted);margin-left:.25rem">🟡 Yellows H/A:</span>
+          <input type="number" id="fhy-${r.id}" min="0" max="15" placeholder="H" style="width:40px"/>
           <span>/</span>
-          <input type="number" id="fab-${r.id}" min="0" max="15" placeholder="A" style="width:46px"/>
+          <input type="number" id="fay-${r.id}" min="0" max="15" placeholder="A" style="width:40px"/>
+          <span style="font-size:.7rem;color:var(--muted);margin-left:.25rem">🔴 Reds H/A:</span>
+          <input type="number" id="fhr-${r.id}" min="0" max="5" placeholder="H" style="width:38px"/>
+          <span>/</span>
+          <input type="number" id="far-${r.id}" min="0" max="5" placeholder="A" style="width:38px"/>
           <button class="save-btn" onclick="submitResult(${r.id})">💾 Save</button>
         </div>
       </div>` : "";
@@ -1090,14 +1127,17 @@ async function submitResult(id) {
   const ag = parseInt(document.getElementById(`fag-${id}`)?.value);
   if (isNaN(hg)||isNaN(ag)) { alert("Goals required"); return; }
 
-  const hc = document.getElementById(`fhc-${id}`)?.value;
-  const ac = document.getElementById(`fac-${id}`)?.value;
-  const hb = document.getElementById(`fhb-${id}`)?.value;
-  const ab = document.getElementById(`fab-${id}`)?.value;
+  const hc  = document.getElementById(`fhc-${id}`)?.value;
+  const ac  = document.getElementById(`fac-${id}`)?.value;
+  const hyw = document.getElementById(`fhy-${id}`)?.value;
+  const ayw = document.getElementById(`fay-${id}`)?.value;
+  const hr  = document.getElementById(`fhr-${id}`)?.value;
+  const ar  = document.getElementById(`far-${id}`)?.value;
 
   const payload = { id, actual_home: hg, actual_away: ag };
-  if (hc&&ac) { payload.actual_home_corners=parseInt(hc); payload.actual_away_corners=parseInt(ac); }
-  if (hb&&ab) { payload.actual_home_bookings=parseInt(hb); payload.actual_away_bookings=parseInt(ab); }
+  if (hc &&ac)  { payload.actual_home_corners=parseInt(hc);  payload.actual_away_corners=parseInt(ac);  }
+  if (hyw&&ayw) { payload.actual_home_yellows=parseInt(hyw); payload.actual_away_yellows=parseInt(ayw); }
+  if (hr &&ar)  { payload.actual_home_reds   =parseInt(hr);  payload.actual_away_reds   =parseInt(ar);  }
 
   try {
     const res  = await fetch(`${API}/api/history/update`, {
@@ -1111,6 +1151,24 @@ async function submitResult(id) {
   } catch(err) {
     alert("Failed: " + err.message);
   }
+}
+
+
+function showToast(msg, color) {
+  const t = document.createElement("div");
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:20px;right:20px;background:${color||"#238636"};color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3)`;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity="0"; t.style.transition="opacity .5s"; setTimeout(()=>t.remove(), 600); }, 2500);
+}
+
+async function forcePrediction() {
+  // Close duplicate box and predict ignoring duplicate check
+  const box = document.getElementById("duplicateBox");
+  if (box) box.style.display = "none";
+  window._forcePrediction = true;
+  await runPrediction();
+  window._forcePrediction = false;
 }
 
 async function autoCheckResults() {

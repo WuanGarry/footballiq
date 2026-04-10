@@ -159,6 +159,23 @@ def api_predict():
         return _err(f"Unknown away team: '{away_team}' — not in model yet")
 
     try:
+        # Check if this match was already predicted (pending)
+        # Skip check if user explicitly forced a re-prediction
+        force = body.get("force", False)
+        existing_records = shared_store.load()
+        duplicate = (None if force else
+                     shared_store.match_already_predicted(home_team, away_team, existing_records))
+        if duplicate:
+            return _ok({
+                "duplicate":       True,
+                "history_id":      duplicate["id"],
+                "predicted_result":duplicate["pred_result"],
+                "timestamp":       duplicate["timestamp"],
+                "message":         (f"{home_team} vs {away_team} was already predicted "
+                                    f"on {duplicate['timestamp'][:10]}. "
+                                    f"Check Prediction History tab."),
+            })
+
         result = predictor.predict(home_team, away_team, division)
         # Save to shared store (all devices see this)
         match_date = body.get("match_date", "")
@@ -322,10 +339,16 @@ def api_history_update():
     aa   = body.get("actual_away")
     if rid is None or ah is None or aa is None:
         return _err("Required: id, actual_home, actual_away")
+
+    def _int_or_none(key):
+        v = body.get(key)
+        return int(v) if v is not None and str(v).strip() != "" else None
+
     updated = shared_store.resolve_prediction(
         int(rid), int(ah), int(aa),
-        body.get("actual_home_corners"), body.get("actual_away_corners"),
-        body.get("actual_home_bookings"), body.get("actual_away_bookings"),
+        _int_or_none("actual_home_corners"), _int_or_none("actual_away_corners"),
+        _int_or_none("actual_home_yellows"), _int_or_none("actual_away_yellows"),
+        _int_or_none("actual_home_reds"),    _int_or_none("actual_away_reds"),
     )
     return _ok({"record": updated})
 

@@ -1,11 +1,11 @@
 """
 history_manager.py
-Saves every prediction, then auto-fetches actual results from FBRef
-including goals, corners, and bookings — and compares to what was predicted.
+Auto-fetches actual results from FBRef for pending predictions.
+Scrapes goals, corners, yellow cards, and red cards.
 """
 
 import json, os, time, logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -15,9 +15,6 @@ log = logging.getLogger("history")
 
 DATA_DIR     = Path(os.environ.get("DATA_DIR",
                str(Path(__file__).resolve().parent.parent / "data")))
-HISTORY_FILE = DATA_DIR / "prediction_history.json"
-
-_memory_store: list = []
 
 HEADERS = {
     "User-Agent": (
@@ -28,191 +25,82 @@ HEADERS = {
 }
 
 
-# ── Persistence ────────────────────────────────────────────────────────────────
-
-def _load() -> list:
-    try:
-        if HISTORY_FILE.exists():
-            with open(HISTORY_FILE) as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return list(_memory_store)
-
-
-def _save(records: list):
-    global _memory_store
-    _memory_store = records
-    try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(HISTORY_FILE, "w") as f:
-            json.dump(records, f, indent=2)
-    except Exception as e:
-        log.debug(f"Could not write history: {e}")
-
-
-# ── Public API ─────────────────────────────────────────────────────────────────
-
-def save_prediction(prediction: dict) -> dict:
-    records = _load()
-    record = {
-        "id":               _next_id(records),
-        "timestamp":        datetime.utcnow().isoformat() + "Z",
-        "match_date":       prediction.get("match_date", ""),
-        "home_team":        prediction["home_team"],
-        "away_team":        prediction["away_team"],
-        "division":         prediction.get("division", ""),
-        # Predicted values
-        "pred_result":      prediction["predicted_result"],
-        "pred_home_goals":  round(float(prediction.get("expected_goals_home") or 0), 2),
-        "pred_away_goals":  round(float(prediction.get("expected_goals_away") or 0), 2),
-        "pred_home_corners":round(float(prediction.get("expected_corners_home") or 0), 1),
-        "pred_away_corners":round(float(prediction.get("expected_corners_away") or 0), 1),
-        "pred_home_bookings":round(float(prediction.get("expected_bookings_home") or 0), 1),
-        "pred_away_bookings":round(float(prediction.get("expected_bookings_away") or 0), 1),
-        "pred_total_corners":round(float(prediction.get("expected_total_corners") or 0), 1),
-        "result_probs":     prediction.get("result_probabilities", {}),
-        "top_scorelines":   prediction.get("top_scorelines", [])[:3],
-        "btts_prob":        prediction.get("betting_insights", {}).get("btts_probability"),
-        "over25_prob":      prediction.get("betting_insights", {}).get("over_2_5_goals"),
-        # Actual (filled later)
-        "actual_result":        None,
-        "actual_home_goals":    None,
-        "actual_away_goals":    None,
-        "actual_home_corners":  None,
-        "actual_away_corners":  None,
-        "actual_home_bookings": None,
-        "actual_away_bookings": None,
-        # Evaluation
-        "result_correct":   None,
-        "goals_error":      None,
-        "corners_error":    None,
-        "bookings_error":   None,
-        "scoreline_in_top3":None,
-        "status":           "pending",
-    }
-    records.append(record)
-    _save(records)
-    return record
-
-
-def get_history(limit: int = 100, division: str = None) -> dict:
-    records = _load()
-    if division:
-        records = [r for r in records if r.get("division") == division]
-    records = sorted(records, key=lambda x: x.get("timestamp",""), reverse=True)
-
-    all_rec  = _load()
-    resolved = [r for r in all_rec if r.get("status") in ("correct","wrong")]
-    correct  = [r for r in resolved if r.get("status") == "correct"]
-
-    goal_errs    = [r["goals_error"]    for r in resolved if r.get("goals_error")    is not None]
-    corner_errs  = [r["corners_error"]  for r in resolved if r.get("corners_error")  is not None]
-    booking_errs = [r["bookings_error"] for r in resolved if r.get("bookings_error") is not None]
-    exact_scores = [r for r in resolved if r.get("scoreline_in_top3")]
-
-    stats = {
-        "total_predictions": len(all_rec),
-        "resolved":          len(resolved),
-        "pending":           len([r for r in all_rec if r.get("status") == "pending"]),
-        "correct":           len(correct),
-        "wrong":             len(resolved) - len(correct),
-        "accuracy_pct":      round(len(correct)/len(resolved)*100, 1) if resolved else None,
-        "avg_goal_error":    round(sum(goal_errs)/len(goal_errs), 2)      if goal_errs    else None,
-        "avg_corner_error":  round(sum(corner_errs)/len(corner_errs), 2)  if corner_errs  else None,
-        "avg_booking_error": round(sum(booking_errs)/len(booking_errs), 2)if booking_errs else None,
-        "exact_scorelines":  len(exact_scores),
-        "exact_score_pct":   round(len(exact_scores)/len(resolved)*100,1) if resolved     else None,
-    }
-    return {"records": records[:limit], "stats": stats}
-
-
-def update_result(record_id: int, actual_home: int, actual_away: int,
-                  actual_home_corners: int = None, actual_away_corners: int = None,
-                  actual_home_bookings: int = None, actual_away_bookings: int = None) -> dict:
-    records = _load()
-    for i, r in enumerate(records):
-        if r["id"] == record_id:
-            records[i] = _apply_result(r, actual_home, actual_away,
-                                        actual_home_corners, actual_away_corners,
-                                        actual_home_bookings, actual_away_bookings)
-            break
-    _save(records)
-    return next((r for r in records if r["id"] == record_id), {})
-
-
 def check_results_from_fbref() -> int:
     """
-    Auto-fetch actual results from FBRef for all pending predictions
-    older than 2 hours. Scrapes goals, corners, and bookings.
+    Auto-fetch actual results for all pending predictions older than 90 min.
+    Tries to find goals, corners, yellows, and reds.
+    Returns number of predictions updated.
     """
-    records = _load()
+    import shared_store
+    records = shared_store.load()
     pending = [r for r in records if r.get("status") == "pending"]
     updated = 0
 
     for r in pending:
+        # Skip if prediction is too recent (match may still be playing)
         try:
-            ts = datetime.fromisoformat(r["timestamp"].rstrip("Z"))
-            if (datetime.utcnow() - ts).total_seconds() < 5400:  # 90 min
+            ts  = datetime.fromisoformat(r["timestamp"].rstrip("Z"))
+            age = (datetime.utcnow() - ts).total_seconds()
+            if age < 5400:   # 90 minutes
                 continue
         except Exception:
             continue
 
-        result = _lookup_full_result(r["home_team"], r["away_team"])
+        result = _lookup_full_result(
+            r["home_team"], r["away_team"], r.get("match_date", "")
+        )
         if result:
-            idx = next((i for i,x in enumerate(records) if x["id"]==r["id"]), None)
-            if idx is not None:
-                records[idx] = _apply_result(
-                    records[idx],
-                    result["home_goals"],      result["away_goals"],
-                    result.get("home_corners"), result.get("away_corners"),
-                    result.get("home_bookings"), result.get("away_bookings"),
-                )
-                updated += 1
-            time.sleep(4)
+            shared_store.resolve_prediction(
+                r["id"],
+                result["home_goals"],       result["away_goals"],
+                result.get("home_corners"), result.get("away_corners"),
+                result.get("home_yellows"), result.get("away_yellows"),
+                result.get("home_reds"),    result.get("away_reds"),
+            )
+            updated += 1
+            log.info(f"Auto-resolved: {r['home_team']} vs {r['away_team']} "
+                     f"→ {result['home_goals']}-{result['away_goals']}")
+            time.sleep(3)
 
     if updated:
-        _save(records)
-        log.info(f"Auto-resolved {updated} predictions from FBRef")
+        log.info(f"Auto-resolved {updated} predictions")
     return updated
 
 
-def _lookup_full_result(home: str, away: str) -> dict | None:
+def _lookup_full_result(home: str, away: str, match_date: str = "") -> dict | None:
     """
-    Scrape FBRef for goals + corners + bookings for a given match.
-    Checks today and previous 5 days.
+    Search FBRef for the actual match result.
+    Scans today and 14 days back.
+    Returns dict with home_goals, away_goals, and optional corners/cards.
     """
     from team_aliases import normalise
 
-    # Build list of dates to check — if we have match_date, try it first
-    dates_to_try = []
-    if match_date:  # e.g. "2026-04-07" or "07-04-2026"
+    # Build date list — stored match_date first for efficiency
+    dates = []
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
         try:
-            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
-                try:
-                    dt = datetime.strptime(match_date.strip(), fmt)
-                    dates_to_try.append(dt.strftime("%Y-%m-%d"))
-                    # Also try day before/after for timezone drift
-                    dates_to_try.append((dt + timedelta(days=1)).strftime("%Y-%m-%d"))
-                    dates_to_try.append((dt - timedelta(days=1)).strftime("%Y-%m-%d"))
-                    break
-                except ValueError:
-                    continue
-        except Exception:
-            pass
-    # Then scan last 14 days as fallback
-    for delta in range(0, 14):
-        d_str = (datetime.utcnow() - timedelta(days=delta)).strftime("%Y-%m-%d")
-        if d_str not in dates_to_try:
-            dates_to_try.append(d_str)
+            dt = datetime.strptime(match_date.strip(), fmt)
+            for delta in range(-1, 2):
+                d = (dt + timedelta(days=delta)).strftime("%Y-%m-%d")
+                if d not in dates:
+                    dates.append(d)
+            break
+        except (ValueError, AttributeError):
+            continue
 
-    for check_date in dates_to_try:
-        url        = f"https://fbref.com/en/matches/{check_date}"
+    for delta in range(0, 15):
+        d = (datetime.utcnow() - timedelta(days=delta)).strftime("%Y-%m-%d")
+        if d not in dates:
+            dates.append(d)
+
+    for check_date in dates:
+        url = f"https://fbref.com/en/matches/{check_date}"
         try:
             html = requests.get(url, headers=HEADERS, timeout=15).text
             html = html.replace("<!--", "").replace("-->", "")
             soup = BeautifulSoup(html, "html.parser")
         except Exception:
+            time.sleep(2)
             continue
 
         for tr in soup.find_all("tr"):
@@ -237,8 +125,8 @@ def _lookup_full_result(home: str, away: str) -> dict | None:
             if not (_names_match(h_norm, home) and _names_match(a_norm, away)):
                 continue
 
-            # Found the match — get score
-            score = (g("score") or g("result") or "").replace("–","-")
+            # Found the match
+            score = (g("score") or g("result") or "").replace("–", "-")
             if "-" not in score:
                 continue
             parts = score.split("-")
@@ -249,19 +137,21 @@ def _lookup_full_result(home: str, away: str) -> dict | None:
             except ValueError:
                 continue
 
-            # Try to get match report link for detailed stats
-            match_link = None
-            for td in tr.find_all("td"):
-                a_tag = td.find("a", href=True)
-                if a_tag and "/matches/" in a_tag["href"] and len(a_tag["href"]) > 20:
-                    match_link = "https://fbref.com" + a_tag["href"]
-                    break
-
             result = {"home_goals": hg, "away_goals": ag}
 
-            # Try to get corners + bookings from match report
-            if match_link:
-                extra = _scrape_match_report(match_link)
+            # Try to get detailed stats from match report page
+            match_url = None
+            for td in tr.find_all("td"):
+                a_tag = td.find("a", href=True)
+                if a_tag and "/matches/" in a_tag["href"] and \
+                   len(a_tag["href"].split("/")) >= 4:
+                    candidate = "https://fbref.com" + a_tag["href"]
+                    if candidate != url:
+                        match_url = candidate
+                        break
+
+            if match_url:
+                extra = _scrape_match_report(match_url)
                 result.update(extra)
 
             return result
@@ -271,123 +161,123 @@ def _lookup_full_result(home: str, away: str) -> dict | None:
 
 
 def _scrape_match_report(url: str) -> dict:
-    """Scrape a FBRef match report page for corners and bookings."""
+    """
+    Scrape a FBRef match report page for:
+    - corners (HC/AC)
+    - yellow cards (HY/AY)
+    - red cards (HR/AR)
+    """
     extra = {}
     try:
         html = requests.get(url, headers=HEADERS, timeout=15).text
-        html = html.replace("<!--","").replace("-->","")
+        html = html.replace("<!--", "").replace("-->", "")
         soup = BeautifulSoup(html, "html.parser")
 
-        # Corners: look for "CK" stat in the match stats table
-        for row in soup.find_all("tr"):
-            label = row.find("td", {"data-stat": "stat"})
-            if label and "corner" in label.get_text(strip=True).lower():
-                cells = row.find_all("td")
-                if len(cells) >= 3:
-                    try:
-                        extra["home_corners"] = int(cells[0].get_text(strip=True))
-                        extra["away_corners"] = int(cells[-1].get_text(strip=True))
-                    except ValueError:
-                        pass
-
-        # Bookings: count yellow/red cards
-        home_bookings = 0
-        away_bookings = 0
-        for event in soup.find_all(["div","span"], class_=lambda x: x and "card" in x.lower()):
-            text = event.get_text(strip=True).lower()
-            if "yellow" in text:
-                # Rough heuristic: events before half-time separator = home
-                home_bookings += 1
-            elif "red" in text:
-                home_bookings += 1
-
-        # Try the events table instead
-        for tr in soup.find_all("tr"):
-            event_type = ""
-            for td in tr.find_all("td"):
-                stat = td.get("data-stat","")
-                if stat == "event_type":
-                    event_type = td.get_text(strip=True).lower()
-                elif stat in ("cards_yellow","cards_red"):
-                    val_text = td.get_text(strip=True)
-                    if val_text.isdigit():
-                        if "home" in tr.get("class",[]).__str__().lower():
-                            home_bookings += int(val_text)
-                        else:
-                            away_bookings += int(val_text)
-
-        if home_bookings or away_bookings:
-            extra["home_bookings"] = home_bookings
-            extra["away_bookings"] = away_bookings
-
-        # Try direct stats summary boxes (FBRef shows team stats in #team_stats)
-        stats_div = soup.find("div", id="team_stats")
+        # Method 1: team stats table (most reliable)
+        stats_div = (soup.find("div", id="team_stats") or
+                     soup.find("div", id="team_stats_extra"))
         if stats_div:
-            for row in stats_div.find_all("tr"):
-                cells = row.find_all(["td","th"])
+            for tr in stats_div.find_all("tr"):
+                cells = tr.find_all(["td","th"])
                 if len(cells) < 3:
                     continue
-                label_text = cells[1].get_text(strip=True).lower() if len(cells) > 1 else ""
-                if "corner" in label_text:
+                label = cells[1].get_text(strip=True).lower() if len(cells) > 1 else ""
+
+                if "corner" in label:
                     try:
                         extra["home_corners"] = int(cells[0].get_text(strip=True).split()[0])
                         extra["away_corners"] = int(cells[2].get_text(strip=True).split()[0])
                     except Exception:
                         pass
 
+        # Method 2: look for shot stats tables which include CK (corner kicks)
+        for table in soup.find_all("table"):
+            table_id = table.get("id", "")
+            # Shot stats tables have CK column
+            if "shots" in table_id or "summary" in table_id:
+                header_row = table.find("thead")
+                if not header_row:
+                    continue
+                headers = [th.get("data-stat","").lower()
+                           for th in header_row.find_all(["th","td"])]
+                if "corner_kicks" in headers or "ck" in headers:
+                    ck_idx = next((i for i,h in enumerate(headers)
+                                   if h in ("corner_kicks","ck")), None)
+                    if ck_idx is not None:
+                        rows_data = table.find("tbody").find_all("tr") if table.find("tbody") else []
+                        ck_vals = []
+                        for row in rows_data:
+                            cells = row.find_all(["td","th"])
+                            if len(cells) > ck_idx:
+                                try:
+                                    ck_vals.append(int(cells[ck_idx].get_text(strip=True)))
+                                except ValueError:
+                                    pass
+                        if len(ck_vals) >= 2 and "home_corners" not in extra:
+                            extra["home_corners"] = ck_vals[0]
+                            extra["away_corners"] = ck_vals[1]
+
+        # Method 3: Scrape the events list for cards
+        home_yellows = 0
+        away_yellows = 0
+        home_reds    = 0
+        away_reds    = 0
+
+        # FBRef events are in #events_wrap divs
+        events_div = soup.find("div", id="events_wrap")
+        if events_div:
+            for event in events_div.find_all("div", class_=lambda x: x and "event" in x):
+                text  = event.get_text(" ", strip=True).lower()
+                cls   = " ".join(event.get("class", []))
+                is_home = "a" not in cls  # home events typically don't have 'away' class
+                is_away = "away" in cls or "b" in cls
+
+                if "yellow card" in text or "caution" in text:
+                    if is_away:
+                        away_yellows += 1
+                    else:
+                        home_yellows += 1
+                elif "red card" in text or "sending off" in text:
+                    if is_away:
+                        away_reds += 1
+                    else:
+                        home_reds += 1
+
+        # Fallback: count card icons in the timeline
+        if home_yellows == 0 and away_yellows == 0:
+            for span in soup.find_all("span", class_=lambda x: x and "yellow" in str(x).lower()):
+                parent_text = span.parent.get_text() if span.parent else ""
+                # Very rough — left side = home
+                pos = soup.get_text().find(span.get_text())
+                if pos < len(soup.get_text()) // 2:
+                    home_yellows += 1
+                else:
+                    away_yellows += 1
+
+        if home_yellows or away_yellows or home_reds or away_reds:
+            extra.update({
+                "home_yellows": home_yellows,
+                "away_yellows": away_yellows,
+                "home_reds":    home_reds,
+                "away_reds":    away_reds,
+            })
+
     except Exception as e:
-        log.debug(f"Match report scrape failed: {e}")
+        log.debug(f"Match report scrape error: {e}")
+
     return extra
 
 
 def _names_match(a: str, b: str) -> bool:
+    """Fuzzy name match — true if names are close enough."""
     a, b = a.lower().strip(), b.lower().strip()
-    return a == b or a in b or b in a or (len(a) > 4 and a[:4] == b[:4])
-
-
-def _apply_result(r: dict, actual_home: int, actual_away: int,
-                  actual_home_corners=None, actual_away_corners=None,
-                  actual_home_bookings=None, actual_away_bookings=None) -> dict:
-    r["actual_home_goals"]    = actual_home
-    r["actual_away_goals"]    = actual_away
-    r["actual_home_corners"]  = actual_home_corners
-    r["actual_away_corners"]  = actual_away_corners
-    r["actual_home_bookings"] = actual_home_bookings
-    r["actual_away_bookings"] = actual_away_bookings
-
-    if actual_home > actual_away:
-        r["actual_result"] = "Home Win"
-    elif actual_away > actual_home:
-        r["actual_result"] = "Away Win"
-    else:
-        r["actual_result"] = "Draw"
-
-    r["result_correct"]    = (r["pred_result"] == r["actual_result"])
-    r["status"]            = "correct" if r["result_correct"] else "wrong"
-
-    # Goals MAE
-    ph = float(r.get("pred_home_goals") or 0)
-    pa = float(r.get("pred_away_goals") or 0)
-    r["goals_error"] = round((abs(ph - actual_home) + abs(pa - actual_away)) / 2, 2)
-
-    # Corners MAE (if available)
-    if actual_home_corners is not None and actual_away_corners is not None:
-        phc = float(r.get("pred_home_corners") or 0)
-        pac = float(r.get("pred_away_corners") or 0)
-        r["corners_error"] = round((abs(phc - actual_home_corners) + abs(pac - actual_away_corners)) / 2, 2)
-
-    # Bookings MAE (if available)
-    if actual_home_bookings is not None and actual_away_bookings is not None:
-        phb = float(r.get("pred_home_bookings") or 0)
-        pab = float(r.get("pred_away_bookings") or 0)
-        r["bookings_error"] = round((abs(phb - actual_home_bookings) + abs(pab - actual_away_bookings)) / 2, 2)
-
-    # Was the actual scoreline in our top-3 predicted scorelines?
-    top3 = [s["scoreline"] for s in r.get("top_scorelines", [])]
-    r["scoreline_in_top3"] = f"{actual_home}-{actual_away}" in top3
-
-    return r
-
-
-def _next_id(records: list) -> int:
-    return max((r["id"] for r in records), default=0) + 1
+    if a == b:
+        return True
+    if len(a) > 4 and len(b) > 4:
+        # One contains the other
+        if a in b or b in a:
+            return True
+        # First 5 chars match
+        if a[:5] == b[:5]:
+            return True
+    return False
